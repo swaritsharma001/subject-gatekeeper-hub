@@ -793,7 +793,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-14 right-0 bg-black/95 rounded-xl overflow-hidden min-w-[260px] shadow-2xl backdrop-blur-md border border-white/10"
+                    className="absolute bottom-16 sm:bottom-14 right-0 bg-black/95 rounded-xl overflow-hidden min-w-[280px] max-h-[70vh] overflow-y-auto shadow-2xl backdrop-blur-md border border-white/10"
                   >
                     {settingsMenu === 'main' && (
                       <div className="py-2">
