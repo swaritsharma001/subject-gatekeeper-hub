@@ -11,17 +11,23 @@ import {
   Minimize,
   Settings, 
   Loader2,
-  SkipBack,
-  SkipForward,
   Check,
   PictureInPicture2,
-  RectangleHorizontal,
-  X
+  ChevronRight,
+  Subtitles,
+  Gauge,
+  Layers
 } from 'lucide-react';
 
 interface VideoPlayerProps {
   src: string;
   title: string;
+}
+
+interface SubtitleTrack {
+  label: string;
+  srclang: string;
+  src: string;
 }
 
 const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
@@ -31,10 +37,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
   const progressRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeout = useRef<NodeJS.Timeout>();
   const doubleTapTimeout = useRef<NodeJS.Timeout>();
+  const longPressTimeout = useRef<NodeJS.Timeout>();
   const lastTapTime = useRef<number>(0);
   const lastTapX = useRef<number>(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const touchStartY = useRef<number>(0);
+  const touchStartX = useRef<number>(0);
+  const isLongPress = useRef<boolean>(false);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -53,17 +62,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [settingsMenu, setSettingsMenu] = useState<'main' | 'quality' | 'speed'>('main');
+  const [settingsMenu, setSettingsMenu] = useState<'main' | 'quality' | 'speed' | 'subtitles'>('main');
   const [isPiP, setIsPiP] = useState(false);
-  const [isTheatreMode, setIsTheatreMode] = useState(false);
-  const [seekIndicator, setSeekIndicator] = useState<{ side: 'left' | 'right'; show: boolean }>({ side: 'left', show: false });
+  const [seekIndicator, setSeekIndicator] = useState<{ side: 'left' | 'right'; show: boolean; seconds: number }>({ side: 'left', show: false, seconds: 10 });
+  const [showSpeedOverlay, setShowSpeedOverlay] = useState(false);
+  const [currentSubtitle, setCurrentSubtitle] = useState<string>('off');
+  const [availableSubtitles] = useState<SubtitleTrack[]>([
+    { label: 'English', srclang: 'en', src: '' },
+    { label: 'Hindi', srclang: 'hi', src: '' },
+    { label: 'Spanish', srclang: 'es', src: '' },
+  ]);
 
-  const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3];
 
   // Initialize HLS
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+
+    // Prevent default video click behavior
+    video.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
 
     if (Hls.isSupported()) {
       const hls = new Hls({
@@ -203,10 +224,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     };
   }, [isPlaying]);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (desktop)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle if video player is focused or no input is focused
       const activeElement = document.activeElement;
       if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') return;
 
@@ -221,10 +241,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
         case 'arrowleft':
           e.preventDefault();
           skip(-10);
+          showSeekIndicator('left', 10);
           break;
         case 'arrowright':
           e.preventDefault();
           skip(10);
+          showSeekIndicator('right', 10);
           break;
         case 'f':
           e.preventDefault();
@@ -238,17 +260,12 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
           e.preventDefault();
           toggleMute();
           break;
-        case 'escape':
-          if (isTheatreMode) {
-            setIsTheatreMode(false);
-          }
-          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, isTheatreMode]);
+  }, [isPlaying]);
 
   // Auto-hide controls
   const resetHideTimer = useCallback(() => {
@@ -261,6 +278,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
         setShowControls(false);
         setShowSettings(false);
         setShowVolumeSlider(false);
+        setShowSpeedOverlay(false);
       }, 3000);
     }
   }, [isPlaying]);
@@ -344,17 +362,26 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     video.playbackRate = speed;
     setPlaybackSpeed(speed);
     setShowSettings(false);
+    setShowSpeedOverlay(false);
     setSettingsMenu('main');
   };
 
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleSubtitleChange = (lang: string) => {
+    setCurrentSubtitle(lang);
+    setShowSettings(false);
+    setSettingsMenu('main');
+    // Here you would actually enable/disable subtitle tracks
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     const video = videoRef.current;
     const progressBar = progressRef.current;
     if (!video || !progressBar) return;
 
     const rect = progressBar.getBoundingClientRect();
-    const percent = (e.clientX - rect.left) / rect.width;
-    video.currentTime = percent * video.duration;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const percent = (clientX - rect.left) / rect.width;
+    video.currentTime = Math.max(0, Math.min(duration, percent * video.duration));
   };
 
   const handleProgressHover = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -373,65 +400,93 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
   };
 
-  // Handle video area click/tap - only toggle controls, NOT pause
-  const handleVideoClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const showSeekIndicator = (side: 'left' | 'right', seconds: number) => {
+    setSeekIndicator({ side, show: true, seconds });
+    setTimeout(() => setSeekIndicator(prev => ({ ...prev, show: false })), 600);
+  };
+
+  // Handle video area tap - NEVER pause, only toggle controls or seek
+  const handleVideoTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     const container = containerRef.current;
     if (!container) return;
 
     const now = Date.now();
     const rect = container.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const isLeftSide = x < rect.width / 2;
+    const isLeftSide = x < rect.width / 3;
+    const isRightSide = x > (rect.width * 2) / 3;
 
-    // Double tap/click detection
+    // Double tap detection
     if (now - lastTapTime.current < 300 && Math.abs(x - lastTapX.current) < 100) {
-      // Double tap detected
       clearTimeout(doubleTapTimeout.current);
       
       if (isLeftSide) {
         skip(-10);
-        setSeekIndicator({ side: 'left', show: true });
-      } else {
+        showSeekIndicator('left', 10);
+      } else if (isRightSide) {
         skip(10);
-        setSeekIndicator({ side: 'right', show: true });
+        showSeekIndicator('right', 10);
       }
       
-      setTimeout(() => setSeekIndicator({ side: 'left', show: false }), 500);
       lastTapTime.current = 0;
     } else {
-      // Single tap - just toggle controls
       lastTapTime.current = now;
       lastTapX.current = x;
       
       doubleTapTimeout.current = setTimeout(() => {
-        // Single tap confirmed - toggle controls only
-        setShowControls(prev => !prev);
-        if (!showControls) {
+        // Single tap - toggle controls only, NEVER pause
+        if (showControls) {
+          setShowControls(false);
+          setShowSettings(false);
+        } else {
+          setShowControls(true);
           resetHideTimer();
         }
-      }, 200);
+      }, 250);
     }
   };
 
-  // Touch handlers for swipe gestures
+  // Touch handlers for mobile gestures
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
+    touchStartX.current = e.touches[0].clientX;
+    isLongPress.current = false;
+
+    // Long press detection for speed menu
+    longPressTimeout.current = setTimeout(() => {
+      isLongPress.current = true;
+      setShowSpeedOverlay(true);
+      setShowControls(true);
+    }, 500);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    const deltaY = touchStartY.current - e.touches[0].clientY;
+    clearTimeout(longPressTimeout.current);
     
-    if (Math.abs(deltaY) > 50) {
+    const deltaY = touchStartY.current - e.touches[0].clientY;
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    
+    // Vertical swipe
+    if (Math.abs(deltaY) > 50 && Math.abs(deltaY) > Math.abs(deltaX)) {
       if (deltaY > 0) {
-        // Swipe up - show controls
         setShowControls(true);
         resetHideTimer();
       } else {
-        // Swipe down - hide controls
         setShowControls(false);
         setShowSettings(false);
       }
       touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    clearTimeout(longPressTimeout.current);
+    if (isLongPress.current) {
+      // Long press ended, hide speed overlay after selection
+      setTimeout(() => setShowSpeedOverlay(false), 3000);
     }
   };
 
@@ -457,33 +512,33 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
   };
 
   const getVolumeIcon = () => {
-    if (isMuted || volume === 0) return <VolumeX className="h-5 w-5 sm:h-6 sm:w-6" />;
-    if (volume < 0.5) return <Volume1 className="h-5 w-5 sm:h-6 sm:w-6" />;
-    return <Volume2 className="h-5 w-5 sm:h-6 sm:w-6" />;
+    if (isMuted || volume === 0) return <VolumeX className="h-6 w-6 sm:h-7 sm:w-7" />;
+    if (volume < 0.5) return <Volume1 className="h-6 w-6 sm:h-7 sm:w-7" />;
+    return <Volume2 className="h-6 w-6 sm:h-7 sm:w-7" />;
   };
 
   return (
     <div
       ref={containerRef}
-      className={`relative overflow-hidden rounded-xl bg-black group transition-all duration-300 ${
-        isTheatreMode ? 'w-full max-w-none aspect-[21/9]' : 'aspect-video w-full'
-      }`}
+      className="relative aspect-video w-full overflow-hidden rounded-xl bg-black select-none"
       onMouseMove={resetHideTimer}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
-      {/* Video Element */}
+      {/* Video Element - click disabled */}
       <video
         ref={videoRef}
-        className="h-full w-full"
+        className="h-full w-full pointer-events-none"
         playsInline
+        webkit-playsinline="true"
       />
 
-      {/* Click/Tap overlay - handles single/double tap */}
+      {/* Tap/Click overlay - handles all interactions */}
       <div 
-        className="absolute inset-0 cursor-pointer"
-        onClick={handleVideoClick}
+        className="absolute inset-0 z-10"
+        onClick={handleVideoTap}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       />
 
       {/* Double tap seek indicators */}
@@ -493,17 +548,57 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.5 }}
-            className={`absolute top-1/2 -translate-y-1/2 ${
-              seekIndicator.side === 'left' ? 'left-12' : 'right-12'
+            className={`absolute top-1/2 -translate-y-1/2 z-20 ${
+              seekIndicator.side === 'left' ? 'left-8 sm:left-16' : 'right-8 sm:right-16'
             }`}
           >
-            <div className="flex flex-col items-center gap-1 bg-black/60 rounded-full p-4">
-              {seekIndicator.side === 'left' ? (
-                <SkipBack className="h-8 w-8 text-white" />
-              ) : (
-                <SkipForward className="h-8 w-8 text-white" />
-              )}
-              <span className="text-white text-sm font-medium">10s</span>
+            <div className="flex flex-col items-center gap-2 bg-black/70 rounded-full p-5 backdrop-blur-sm">
+              <div className="flex items-center gap-1">
+                {seekIndicator.side === 'left' ? (
+                  <>
+                    <div className="w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[12px] border-r-white" />
+                    <div className="w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-r-[12px] border-r-white" />
+                  </>
+                ) : (
+                  <>
+                    <div className="w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[12px] border-l-white" />
+                    <div className="w-0 h-0 border-t-[8px] border-t-transparent border-b-[8px] border-b-transparent border-l-[12px] border-l-white" />
+                  </>
+                )}
+              </div>
+              <span className="text-white text-sm font-semibold">{seekIndicator.seconds} seconds</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Speed overlay (long press) */}
+      <AnimatePresence>
+        {showSpeedOverlay && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 bg-black/90 rounded-2xl p-4 backdrop-blur-sm"
+          >
+            <p className="text-white/70 text-xs text-center mb-3 font-medium">Playback Speed</p>
+            <div className="flex gap-2 flex-wrap justify-center max-w-[280px]">
+              {playbackSpeeds.map((speed) => (
+                <button
+                  key={speed}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSpeedChange(speed);
+                  }}
+                  className={`px-4 py-2.5 rounded-full text-sm font-medium transition-all ${
+                    playbackSpeed === speed 
+                      ? 'bg-white text-black' 
+                      : 'bg-white/20 text-white hover:bg-white/30'
+                  }`}
+                >
+                  {speed}x
+                </button>
+              ))}
             </div>
           </motion.div>
         )}
@@ -516,9 +611,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center bg-black/40 z-20 pointer-events-none"
           >
-            <Loader2 className="h-12 w-12 text-white animate-spin" />
+            <Loader2 className="h-14 w-14 text-white animate-spin" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -531,48 +626,49 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ duration: 0.15 }}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"
           >
-            <div 
-              className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-black/70 cursor-pointer pointer-events-auto hover:bg-black/80 transition-colors"
+            <button 
+              className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-full bg-black/60 backdrop-blur-sm pointer-events-auto hover:bg-black/70 active:scale-95 transition-all shadow-2xl"
               onClick={(e) => {
                 e.stopPropagation();
                 togglePlay();
               }}
             >
-              <Play className="h-7 w-7 sm:h-8 sm:w-8 text-white ml-1" fill="white" />
-            </div>
+              <Play className="h-10 w-10 sm:h-12 sm:w-12 text-white ml-1.5" fill="white" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Title overlay */}
+      <motion.div 
+        initial={false}
+        animate={{ opacity: showControls ? 1 : 0 }}
+        className="absolute top-0 inset-x-0 p-4 sm:p-5 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-20 pointer-events-none"
+      >
+        <h3 className="text-white font-semibold text-base sm:text-lg line-clamp-1 drop-shadow-lg">{title}</h3>
+      </motion.div>
+
       {/* Bottom gradient */}
-      <div 
-        className={`absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
-        }`} 
+      <motion.div 
+        initial={false}
+        animate={{ opacity: showControls ? 1 : 0 }}
+        className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none z-15"
       />
 
-      {/* Title overlay */}
-      <div 
-        className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        <h3 className="text-white font-medium text-sm sm:text-base line-clamp-1">{title}</h3>
-      </div>
-
       {/* Controls */}
-      <div
-        className={`absolute inset-x-0 bottom-0 px-3 pb-3 transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
+      <motion.div
+        initial={false}
+        animate={{ opacity: showControls ? 1 : 0 }}
+        className={`absolute inset-x-0 bottom-0 px-3 sm:px-4 pb-3 sm:pb-4 z-30 ${showControls ? '' : 'pointer-events-none'}`}
       >
-        {/* Progress bar */}
+        {/* Progress bar - bigger for touch */}
         <div
           ref={progressRef}
-          className="relative h-1 w-full cursor-pointer group/progress mb-3 hover:h-1.5 transition-all"
+          className="relative h-2 sm:h-1.5 w-full cursor-pointer group/progress mb-4 touch-none"
           onClick={handleProgressClick}
+          onTouchStart={handleProgressClick}
           onMouseMove={handleProgressHover}
           onMouseLeave={() => setHoverTime(null)}
         >
@@ -587,26 +683,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
           
           {/* Progress */}
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-red-600"
+            className="absolute inset-y-0 left-0 rounded-full bg-red-500"
             style={{ width: `${progress}%` }}
           />
           
-          {/* Hover indicator */}
-          <div 
-            className="absolute inset-y-0 left-0 rounded-full bg-white/30 opacity-0 group-hover/progress:opacity-100"
-            style={{ width: `${(hoverTime ?? 0) / duration * 100}%` }}
-          />
-          
-          {/* Scrubber dot */}
+          {/* Scrubber dot - bigger for touch */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-red-600 opacity-0 group-hover/progress:opacity-100 transition-opacity shadow-lg"
+            className="absolute top-1/2 -translate-y-1/2 h-5 w-5 sm:h-4 sm:w-4 rounded-full bg-red-500 shadow-lg transition-transform active:scale-125"
             style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
           />
 
           {/* Hover time tooltip */}
           {hoverTime !== null && (
             <div
-              className="absolute -top-8 transform -translate-x-1/2 bg-black/90 text-white text-xs px-2 py-1 rounded pointer-events-none"
+              className="absolute -top-10 transform -translate-x-1/2 bg-black/90 text-white text-xs px-3 py-1.5 rounded-lg pointer-events-none font-medium"
               style={{ left: hoverPosition }}
             >
               {formatTime(hoverTime)}
@@ -614,53 +704,41 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
           )}
         </div>
 
-        {/* Control buttons */}
-        <div className="flex items-center justify-between">
+        {/* Control buttons - bigger for mobile */}
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1 sm:gap-2">
-            {/* Play/Pause */}
+            {/* Play/Pause - large touch target */}
             <button
-              onClick={togglePlay}
-              className="p-2 text-white hover:text-white/80 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+              className="p-3 sm:p-2.5 text-white hover:text-white/80 active:scale-90 transition-all rounded-full hover:bg-white/10"
             >
               {isPlaying ? (
-                <Pause className="h-5 w-5 sm:h-6 sm:w-6" fill="white" />
+                <Pause className="h-7 w-7 sm:h-6 sm:w-6" fill="white" />
               ) : (
-                <Play className="h-5 w-5 sm:h-6 sm:w-6" fill="white" />
+                <Play className="h-7 w-7 sm:h-6 sm:w-6" fill="white" />
               )}
             </button>
 
-            {/* Skip buttons */}
-            <button
-              onClick={() => skip(-10)}
-              className="p-2 text-white hover:text-white/80 transition-colors hidden sm:block"
-              title="Rewind 10s (←)"
-            >
-              <SkipBack className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => skip(10)}
-              className="p-2 text-white hover:text-white/80 transition-colors hidden sm:block"
-              title="Forward 10s (→)"
-            >
-              <SkipForward className="h-5 w-5" />
-            </button>
-
-            {/* Volume */}
+            {/* Volume - desktop only */}
             <div 
-              className="relative flex items-center"
+              className="relative items-center hidden sm:flex"
               onMouseEnter={() => setShowVolumeSlider(true)}
               onMouseLeave={() => setShowVolumeSlider(false)}
             >
               <button
-                onClick={toggleMute}
-                className="p-2 text-white hover:text-white/80 transition-colors"
-                title="Mute (M)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleMute();
+                }}
+                className="p-2.5 text-white hover:text-white/80 transition-colors rounded-full hover:bg-white/10"
               >
                 {getVolumeIcon()}
               </button>
               
-              {/* Volume slider */}
-              <div className={`overflow-hidden transition-all duration-200 ${showVolumeSlider ? 'w-20 opacity-100' : 'w-0 opacity-0'}`}>
+              <div className={`overflow-hidden transition-all duration-200 ${showVolumeSlider ? 'w-24 opacity-100' : 'w-0 opacity-0'}`}>
                 <input
                   type="range"
                   min="0"
@@ -668,53 +746,95 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                   step="0.05"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
-                  className="w-full h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
                 />
               </div>
             </div>
 
-            {/* Time */}
-            <span className="text-white text-xs sm:text-sm ml-2 font-medium tabular-nums">
-              {formatTime(currentTime)} / {formatTime(duration)}
+            {/* Time display */}
+            <span className="text-white text-xs sm:text-sm font-medium tabular-nums ml-1">
+              {formatTime(currentTime)} <span className="text-white/60">/</span> {formatTime(duration)}
             </span>
           </div>
 
           <div className="flex items-center gap-0.5 sm:gap-1">
-            {/* Settings (Quality & Speed) */}
+            {/* Subtitles */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSettings(true);
+                setSettingsMenu('subtitles');
+              }}
+              className={`p-3 sm:p-2.5 transition-all rounded-full hover:bg-white/10 ${
+                currentSubtitle !== 'off' ? 'text-red-500' : 'text-white hover:text-white/80'
+              }`}
+            >
+              <Subtitles className="h-6 w-6 sm:h-5 sm:w-5" />
+            </button>
+
+            {/* Settings */}
             <div className="relative">
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowSettings(!showSettings);
                   setSettingsMenu('main');
                 }}
-                className="p-2 text-white hover:text-white/80 transition-colors"
+                className="p-3 sm:p-2.5 text-white hover:text-white/80 transition-all rounded-full hover:bg-white/10"
               >
-                <Settings className={`h-5 w-5 sm:h-6 sm:w-6 transition-transform ${showSettings ? 'rotate-45' : ''}`} />
+                <Settings className={`h-6 w-6 sm:h-5 sm:w-5 transition-transform ${showSettings ? 'rotate-45' : ''}`} />
               </button>
 
               <AnimatePresence>
                 {showSettings && (
                   <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-12 right-0 bg-black/95 rounded-lg overflow-hidden min-w-[200px] shadow-xl backdrop-blur-sm"
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute bottom-14 right-0 bg-black/95 rounded-xl overflow-hidden min-w-[220px] shadow-2xl backdrop-blur-md border border-white/10"
                   >
                     {settingsMenu === 'main' && (
-                      <div className="py-1">
+                      <div className="py-2">
                         <button
                           onClick={() => setSettingsMenu('speed')}
-                          className="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
+                          className="w-full px-4 py-3.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white active:bg-white/20"
                         >
-                          <span>Playback speed</span>
-                          <span className="text-white/60">{playbackSpeed === 1 ? 'Normal' : `${playbackSpeed}x`}</span>
+                          <div className="flex items-center gap-3">
+                            <Gauge className="h-5 w-5 text-white/70" />
+                            <span>Playback speed</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-white/60">
+                            <span>{playbackSpeed === 1 ? 'Normal' : `${playbackSpeed}x`}</span>
+                            <ChevronRight className="h-4 w-4" />
+                          </div>
                         </button>
                         <button
                           onClick={() => setSettingsMenu('quality')}
-                          className="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
+                          className="w-full px-4 py-3.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white active:bg-white/20"
                         >
-                          <span>Quality</span>
-                          <span className="text-white/60">{currentQuality === -1 ? 'Auto' : getQualityLabel(currentQuality)}</span>
+                          <div className="flex items-center gap-3">
+                            <Layers className="h-5 w-5 text-white/70" />
+                            <span>Quality</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-white/60">
+                            <span>{currentQuality === -1 ? 'Auto' : getQualityLabel(currentQuality)}</span>
+                            <ChevronRight className="h-4 w-4" />
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => setSettingsMenu('subtitles')}
+                          className="w-full px-4 py-3.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white active:bg-white/20"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Subtitles className="h-5 w-5 text-white/70" />
+                            <span>Subtitles</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-white/60">
+                            <span>{currentSubtitle === 'off' ? 'Off' : availableSubtitles.find(s => s.srclang === currentSubtitle)?.label}</span>
+                            <ChevronRight className="h-4 w-4" />
+                          </div>
                         </button>
                       </div>
                     )}
@@ -723,21 +843,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                       <>
                         <button
                           onClick={() => setSettingsMenu('main')}
-                          className="w-full px-4 py-2.5 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                          className="w-full px-4 py-3 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
                         >
                           ← Playback speed
                         </button>
-                        <div className="py-1 max-h-[240px] overflow-y-auto">
+                        <div className="py-1 max-h-[280px] overflow-y-auto">
                           {playbackSpeeds.map((speed) => (
                             <button
                               key={speed}
                               onClick={() => handleSpeedChange(speed)}
-                              className={`w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                              className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between hover:bg-white/10 active:bg-white/20 ${
                                 playbackSpeed === speed ? 'text-white bg-white/5' : 'text-white/70'
                               }`}
                             >
                               <span>{speed === 1 ? 'Normal' : `${speed}x`}</span>
-                              {playbackSpeed === speed && <Check className="h-4 w-4 text-red-500" />}
+                              {playbackSpeed === speed && <Check className="h-5 w-5 text-red-500" />}
                             </button>
                           ))}
                         </div>
@@ -748,30 +868,64 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                       <>
                         <button
                           onClick={() => setSettingsMenu('main')}
-                          className="w-full px-4 py-2.5 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                          className="w-full px-4 py-3 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
                         >
                           ← Quality
                         </button>
                         <div className="py-1">
                           <button
                             onClick={() => handleQualityChange(-1)}
-                            className={`w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                            className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between hover:bg-white/10 active:bg-white/20 ${
                               currentQuality === -1 ? 'text-white bg-white/5' : 'text-white/70'
                             }`}
                           >
                             <span>Auto</span>
-                            {currentQuality === -1 && <Check className="h-4 w-4 text-red-500" />}
+                            {currentQuality === -1 && <Check className="h-5 w-5 text-red-500" />}
                           </button>
                           {availableQualities.map((quality) => (
                             <button
                               key={quality}
                               onClick={() => handleQualityChange(quality)}
-                              className={`w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                              className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between hover:bg-white/10 active:bg-white/20 ${
                                 currentQuality === quality ? 'text-white bg-white/5' : 'text-white/70'
                               }`}
                             >
                               <span>{getQualityLabel(quality)}</span>
-                              {currentQuality === quality && <Check className="h-4 w-4 text-red-500" />}
+                              {currentQuality === quality && <Check className="h-5 w-5 text-red-500" />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {settingsMenu === 'subtitles' && (
+                      <>
+                        <button
+                          onClick={() => setSettingsMenu('main')}
+                          className="w-full px-4 py-3 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                        >
+                          ← Subtitles
+                        </button>
+                        <div className="py-1">
+                          <button
+                            onClick={() => handleSubtitleChange('off')}
+                            className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between hover:bg-white/10 active:bg-white/20 ${
+                              currentSubtitle === 'off' ? 'text-white bg-white/5' : 'text-white/70'
+                            }`}
+                          >
+                            <span>Off</span>
+                            {currentSubtitle === 'off' && <Check className="h-5 w-5 text-red-500" />}
+                          </button>
+                          {availableSubtitles.map((sub) => (
+                            <button
+                              key={sub.srclang}
+                              onClick={() => handleSubtitleChange(sub.srclang)}
+                              className={`w-full px-4 py-3 text-left text-sm flex items-center justify-between hover:bg-white/10 active:bg-white/20 ${
+                                currentSubtitle === sub.srclang ? 'text-white bg-white/5' : 'text-white/70'
+                              }`}
+                            >
+                              <span>{sub.label}</span>
+                              {currentSubtitle === sub.srclang && <Check className="h-5 w-5 text-red-500" />}
                             </button>
                           ))}
                         </div>
@@ -782,45 +936,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
               </AnimatePresence>
             </div>
 
-            {/* Theatre Mode */}
-            <button
-              onClick={() => setIsTheatreMode(!isTheatreMode)}
-              className={`p-2 transition-colors hidden sm:block ${isTheatreMode ? 'text-red-500' : 'text-white hover:text-white/80'}`}
-              title="Theatre mode"
-            >
-              {isTheatreMode ? (
-                <X className="h-5 w-5 sm:h-6 sm:w-6" />
-              ) : (
-                <RectangleHorizontal className="h-5 w-5 sm:h-6 sm:w-6" />
-              )}
-            </button>
-
             {/* Picture in Picture */}
             {document.pictureInPictureEnabled && (
               <button
-                onClick={togglePiP}
-                className={`p-2 transition-colors ${isPiP ? 'text-red-500' : 'text-white hover:text-white/80'}`}
-                title="Picture in Picture (P)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  togglePiP();
+                }}
+                className={`p-3 sm:p-2.5 transition-all rounded-full hover:bg-white/10 ${isPiP ? 'text-red-500' : 'text-white hover:text-white/80'}`}
               >
-                <PictureInPicture2 className="h-5 w-5 sm:h-6 sm:w-6" />
+                <PictureInPicture2 className="h-6 w-6 sm:h-5 sm:w-5" />
               </button>
             )}
 
             {/* Fullscreen */}
             <button
-              onClick={toggleFullscreen}
-              className="p-2 text-white hover:text-white/80 transition-colors"
-              title="Fullscreen (F)"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFullscreen();
+              }}
+              className="p-3 sm:p-2.5 text-white hover:text-white/80 transition-all rounded-full hover:bg-white/10"
             >
               {isFullscreen ? (
-                <Minimize className="h-5 w-5 sm:h-6 sm:w-6" />
+                <Minimize className="h-6 w-6 sm:h-5 sm:w-5" />
               ) : (
-                <Maximize className="h-5 w-5 sm:h-6 sm:w-6" />
+                <Maximize className="h-6 w-6 sm:h-5 sm:w-5" />
               )}
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
