@@ -43,6 +43,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [hoverPosition, setHoverPosition] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [settingsMenu, setSettingsMenu] = useState<'main' | 'quality' | 'speed'>('main');
+
+  const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3];
 
   // Initialize HLS
   useEffect(() => {
@@ -210,6 +214,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     }
     setCurrentQuality(height);
     setShowSettings(false);
+    setSettingsMenu('main');
+  };
+
+  const handleSpeedChange = (speed: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = speed;
+    setPlaybackSpeed(speed);
+    setShowSettings(false);
+    setSettingsMenu('main');
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -434,7 +448,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             {/* Settings (Quality) */}
             <div className="relative">
               <button
-                onClick={() => setShowSettings(!showSettings)}
+                onClick={() => {
+                  setShowSettings(!showSettings);
+                  setSettingsMenu('main');
+                }}
                 className="p-2 text-white hover:text-white/80 transition-colors"
               >
                 <Settings className={`h-5 w-5 sm:h-6 sm:w-6 transition-transform ${showSettings ? 'rotate-45' : ''}`} />
@@ -446,34 +463,85 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-12 right-0 bg-black/95 rounded-lg overflow-hidden min-w-[150px] shadow-xl"
+                    className="absolute bottom-12 right-0 bg-black/95 rounded-lg overflow-hidden min-w-[180px] shadow-xl"
                   >
-                    <div className="px-3 py-2 text-white/60 text-xs font-medium border-b border-white/10">
-                      Quality
-                    </div>
-                    <div className="py-1">
-                      <button
-                        onClick={() => handleQualityChange(-1)}
-                        className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
-                          currentQuality === -1 ? 'text-white' : 'text-white/70'
-                        }`}
-                      >
-                        <span>Auto</span>
-                        {currentQuality === -1 && <Check className="h-4 w-4" />}
-                      </button>
-                      {availableQualities.map((quality) => (
+                    {settingsMenu === 'main' && (
+                      <div className="py-1">
                         <button
-                          key={quality}
-                          onClick={() => handleQualityChange(quality)}
-                          className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
-                            currentQuality === quality ? 'text-white' : 'text-white/70'
-                          }`}
+                          onClick={() => setSettingsMenu('speed')}
+                          className="w-full px-3 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
                         >
-                          <span>{getQualityLabel(quality)}</span>
-                          {currentQuality === quality && <Check className="h-4 w-4" />}
+                          <span>Playback speed</span>
+                          <span className="text-white/60">{playbackSpeed}x</span>
                         </button>
-                      ))}
-                    </div>
+                        <button
+                          onClick={() => setSettingsMenu('quality')}
+                          className="w-full px-3 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
+                        >
+                          <span>Quality</span>
+                          <span className="text-white/60">{currentQuality === -1 ? 'Auto' : getQualityLabel(currentQuality)}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {settingsMenu === 'speed' && (
+                      <>
+                        <button
+                          onClick={() => setSettingsMenu('main')}
+                          className="w-full px-3 py-2 text-white/60 text-xs font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                        >
+                          ← Playback speed
+                        </button>
+                        <div className="py-1 max-h-[200px] overflow-y-auto">
+                          {playbackSpeeds.map((speed) => (
+                            <button
+                              key={speed}
+                              onClick={() => handleSpeedChange(speed)}
+                              className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                                playbackSpeed === speed ? 'text-white' : 'text-white/70'
+                              }`}
+                            >
+                              <span>{speed}x</span>
+                              {playbackSpeed === speed && <Check className="h-4 w-4" />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {settingsMenu === 'quality' && (
+                      <>
+                        <button
+                          onClick={() => setSettingsMenu('main')}
+                          className="w-full px-3 py-2 text-white/60 text-xs font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                        >
+                          ← Quality
+                        </button>
+                        <div className="py-1">
+                          <button
+                            onClick={() => handleQualityChange(-1)}
+                            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                              currentQuality === -1 ? 'text-white' : 'text-white/70'
+                            }`}
+                          >
+                            <span>Auto</span>
+                            {currentQuality === -1 && <Check className="h-4 w-4" />}
+                          </button>
+                          {availableQualities.map((quality) => (
+                            <button
+                              key={quality}
+                              onClick={() => handleQualityChange(quality)}
+                              className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                                currentQuality === quality ? 'text-white' : 'text-white/70'
+                              }`}
+                            >
+                              <span>{getQualityLabel(quality)}</span>
+                              {currentQuality === quality && <Check className="h-4 w-4" />}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
