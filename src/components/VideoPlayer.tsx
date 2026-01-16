@@ -6,13 +6,17 @@ import {
   Pause, 
   Volume2, 
   VolumeX, 
+  Volume1,
   Maximize, 
   Minimize,
   Settings, 
   Loader2,
   SkipBack,
   SkipForward,
-  Check
+  Check,
+  PictureInPicture2,
+  RectangleHorizontal,
+  X
 } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -26,6 +30,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const hideControlsTimeout = useRef<NodeJS.Timeout>();
+  const doubleTapTimeout = useRef<NodeJS.Timeout>();
+  const lastTapTime = useRef<number>(0);
+  const lastTapX = useRef<number>(0);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const touchStartY = useRef<number>(0);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -45,8 +54,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
   const [hoverPosition, setHoverPosition] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [settingsMenu, setSettingsMenu] = useState<'main' | 'quality' | 'speed'>('main');
+  const [isPiP, setIsPiP] = useState(false);
+  const [isTheatreMode, setIsTheatreMode] = useState(false);
+  const [seekIndicator, setSeekIndicator] = useState<{ side: 'left' | 'right'; show: boolean }>({ side: 'left', show: false });
 
-  const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3];
+  const playbackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
   // Initialize HLS
   useEffect(() => {
@@ -144,6 +156,100 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  // PiP listener
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleEnterPiP = () => setIsPiP(true);
+    const handleLeavePiP = () => setIsPiP(false);
+
+    video.addEventListener('enterpictureinpicture', handleEnterPiP);
+    video.addEventListener('leavepictureinpicture', handleLeavePiP);
+
+    return () => {
+      video.removeEventListener('enterpictureinpicture', handleEnterPiP);
+      video.removeEventListener('leavepictureinpicture', handleLeavePiP);
+    };
+  }, []);
+
+  // Screen Wake Lock for mobile
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      if ('wakeLock' in navigator && isPlaying) {
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+        } catch (err) {
+          console.log('Wake Lock error:', err);
+        }
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLockRef.current) {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+      }
+    };
+
+    if (isPlaying) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+
+    return () => {
+      releaseWakeLock();
+    };
+  }, [isPlaying]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if video player is focused or no input is focused
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') return;
+
+      const video = videoRef.current;
+      if (!video) return;
+
+      switch (e.key.toLowerCase()) {
+        case ' ':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'arrowleft':
+          e.preventDefault();
+          skip(-10);
+          break;
+        case 'arrowright':
+          e.preventDefault();
+          skip(10);
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'p':
+          e.preventDefault();
+          togglePiP();
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+        case 'escape':
+          if (isTheatreMode) {
+            setIsTheatreMode(false);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlaying, isTheatreMode]);
+
   // Auto-hide controls
   const resetHideTimer = useCallback(() => {
     if (hideControlsTimeout.current) {
@@ -200,6 +306,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     }
   };
 
+  const togglePiP = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled) {
+        await video.requestPictureInPicture();
+      }
+    } catch (err) {
+      console.error('PiP error:', err);
+    }
+  };
+
   const handleQualityChange = (height: number) => {
     const hls = hlsRef.current;
     if (!hls) return;
@@ -252,6 +373,68 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
   };
 
+  // Handle video area click/tap - only toggle controls, NOT pause
+  const handleVideoClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const now = Date.now();
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const isLeftSide = x < rect.width / 2;
+
+    // Double tap/click detection
+    if (now - lastTapTime.current < 300 && Math.abs(x - lastTapX.current) < 100) {
+      // Double tap detected
+      clearTimeout(doubleTapTimeout.current);
+      
+      if (isLeftSide) {
+        skip(-10);
+        setSeekIndicator({ side: 'left', show: true });
+      } else {
+        skip(10);
+        setSeekIndicator({ side: 'right', show: true });
+      }
+      
+      setTimeout(() => setSeekIndicator({ side: 'left', show: false }), 500);
+      lastTapTime.current = 0;
+    } else {
+      // Single tap - just toggle controls
+      lastTapTime.current = now;
+      lastTapX.current = x;
+      
+      doubleTapTimeout.current = setTimeout(() => {
+        // Single tap confirmed - toggle controls only
+        setShowControls(prev => !prev);
+        if (!showControls) {
+          resetHideTimer();
+        }
+      }, 200);
+    }
+  };
+
+  // Touch handlers for swipe gestures
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const deltaY = touchStartY.current - e.touches[0].clientY;
+    
+    if (Math.abs(deltaY) > 50) {
+      if (deltaY > 0) {
+        // Swipe up - show controls
+        setShowControls(true);
+        resetHideTimer();
+      } else {
+        // Swipe down - hide controls
+        setShowControls(false);
+        setShowSettings(false);
+      }
+      touchStartY.current = e.touches[0].clientY;
+    }
+  };
+
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return '0:00';
     const hrs = Math.floor(seconds / 3600);
@@ -273,19 +456,58 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     return `${height}p`;
   };
 
+  const getVolumeIcon = () => {
+    if (isMuted || volume === 0) return <VolumeX className="h-5 w-5 sm:h-6 sm:w-6" />;
+    if (volume < 0.5) return <Volume1 className="h-5 w-5 sm:h-6 sm:w-6" />;
+    return <Volume2 className="h-5 w-5 sm:h-6 sm:w-6" />;
+  };
+
   return (
     <div
       ref={containerRef}
-      className="relative aspect-video w-full overflow-hidden rounded-xl bg-black group"
+      className={`relative overflow-hidden rounded-xl bg-black group transition-all duration-300 ${
+        isTheatreMode ? 'w-full max-w-none aspect-[21/9]' : 'aspect-video w-full'
+      }`}
       onMouseMove={resetHideTimer}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
+      {/* Video Element */}
       <video
         ref={videoRef}
-        className="h-full w-full cursor-pointer"
-        onClick={togglePlay}
+        className="h-full w-full"
         playsInline
       />
+
+      {/* Click/Tap overlay - handles single/double tap */}
+      <div 
+        className="absolute inset-0 cursor-pointer"
+        onClick={handleVideoClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+      />
+
+      {/* Double tap seek indicators */}
+      <AnimatePresence>
+        {seekIndicator.show && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.5 }}
+            className={`absolute top-1/2 -translate-y-1/2 ${
+              seekIndicator.side === 'left' ? 'left-12' : 'right-12'
+            }`}
+          >
+            <div className="flex flex-col items-center gap-1 bg-black/60 rounded-full p-4">
+              {seekIndicator.side === 'left' ? (
+                <SkipBack className="h-8 w-8 text-white" />
+              ) : (
+                <SkipForward className="h-8 w-8 text-white" />
+              )}
+              <span className="text-white text-sm font-medium">10s</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Loading spinner */}
       <AnimatePresence>
@@ -294,14 +516,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center bg-black/50"
+            className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none"
           >
             <Loader2 className="h-12 w-12 text-white animate-spin" />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Big play button (center) */}
+      {/* Big center play button (only when paused) */}
       <AnimatePresence>
         {!isPlaying && !isLoading && (
           <motion.div
@@ -309,10 +531,15 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ duration: 0.15 }}
-            className="absolute inset-0 flex items-center justify-center cursor-pointer"
-            onClick={togglePlay}
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
           >
-            <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-black/70 hover:bg-black/80 transition-colors">
+            <div 
+              className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-black/70 cursor-pointer pointer-events-auto hover:bg-black/80 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+            >
               <Play className="h-7 w-7 sm:h-8 sm:w-8 text-white ml-1" fill="white" />
             </div>
           </motion.div>
@@ -326,16 +553,25 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
         }`} 
       />
 
+      {/* Title overlay */}
+      <div 
+        className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/70 to-transparent transition-opacity duration-300 ${
+          showControls ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        <h3 className="text-white font-medium text-sm sm:text-base line-clamp-1">{title}</h3>
+      </div>
+
       {/* Controls */}
       <div
         className={`absolute inset-x-0 bottom-0 px-3 pb-3 transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
         {/* Progress bar */}
         <div
           ref={progressRef}
-          className="relative h-1 w-full cursor-pointer group/progress mb-2"
+          className="relative h-1 w-full cursor-pointer group/progress mb-3 hover:h-1.5 transition-all"
           onClick={handleProgressClick}
           onMouseMove={handleProgressHover}
           onMouseLeave={() => setHoverTime(null)}
@@ -363,7 +599,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
           
           {/* Scrubber dot */}
           <div
-            className="absolute top-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-red-600 opacity-0 group-hover/progress:opacity-100 transition-opacity"
+            className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-red-600 opacity-0 group-hover/progress:opacity-100 transition-opacity shadow-lg"
             style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}
           />
 
@@ -397,12 +633,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             <button
               onClick={() => skip(-10)}
               className="p-2 text-white hover:text-white/80 transition-colors hidden sm:block"
+              title="Rewind 10s (←)"
             >
               <SkipBack className="h-5 w-5" />
             </button>
             <button
               onClick={() => skip(10)}
               className="p-2 text-white hover:text-white/80 transition-colors hidden sm:block"
+              title="Forward 10s (→)"
             >
               <SkipForward className="h-5 w-5" />
             </button>
@@ -416,12 +654,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
               <button
                 onClick={toggleMute}
                 className="p-2 text-white hover:text-white/80 transition-colors"
+                title="Mute (M)"
               >
-                {isMuted || volume === 0 ? (
-                  <VolumeX className="h-5 w-5 sm:h-6 sm:w-6" />
-                ) : (
-                  <Volume2 className="h-5 w-5 sm:h-6 sm:w-6" />
-                )}
+                {getVolumeIcon()}
               </button>
               
               {/* Volume slider */}
@@ -430,7 +665,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                   type="range"
                   min="0"
                   max="1"
-                  step="0.1"
+                  step="0.05"
                   value={isMuted ? 0 : volume}
                   onChange={handleVolumeChange}
                   className="w-full h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
@@ -439,13 +674,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
             </div>
 
             {/* Time */}
-            <span className="text-white text-xs sm:text-sm ml-2 font-medium">
+            <span className="text-white text-xs sm:text-sm ml-2 font-medium tabular-nums">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
-            {/* Settings (Quality) */}
+          <div className="flex items-center gap-0.5 sm:gap-1">
+            {/* Settings (Quality & Speed) */}
             <div className="relative">
               <button
                 onClick={() => {
@@ -463,20 +698,20 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-12 right-0 bg-black/95 rounded-lg overflow-hidden min-w-[180px] shadow-xl"
+                    className="absolute bottom-12 right-0 bg-black/95 rounded-lg overflow-hidden min-w-[200px] shadow-xl backdrop-blur-sm"
                   >
                     {settingsMenu === 'main' && (
                       <div className="py-1">
                         <button
                           onClick={() => setSettingsMenu('speed')}
-                          className="w-full px-3 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
+                          className="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
                         >
                           <span>Playback speed</span>
-                          <span className="text-white/60">{playbackSpeed}x</span>
+                          <span className="text-white/60">{playbackSpeed === 1 ? 'Normal' : `${playbackSpeed}x`}</span>
                         </button>
                         <button
                           onClick={() => setSettingsMenu('quality')}
-                          className="w-full px-3 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
+                          className="w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white"
                         >
                           <span>Quality</span>
                           <span className="text-white/60">{currentQuality === -1 ? 'Auto' : getQualityLabel(currentQuality)}</span>
@@ -488,21 +723,21 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                       <>
                         <button
                           onClick={() => setSettingsMenu('main')}
-                          className="w-full px-3 py-2 text-white/60 text-xs font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                          className="w-full px-4 py-2.5 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
                         >
                           ← Playback speed
                         </button>
-                        <div className="py-1 max-h-[200px] overflow-y-auto">
+                        <div className="py-1 max-h-[240px] overflow-y-auto">
                           {playbackSpeeds.map((speed) => (
                             <button
                               key={speed}
                               onClick={() => handleSpeedChange(speed)}
-                              className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
-                                playbackSpeed === speed ? 'text-white' : 'text-white/70'
+                              className={`w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                                playbackSpeed === speed ? 'text-white bg-white/5' : 'text-white/70'
                               }`}
                             >
-                              <span>{speed}x</span>
-                              {playbackSpeed === speed && <Check className="h-4 w-4" />}
+                              <span>{speed === 1 ? 'Normal' : `${speed}x`}</span>
+                              {playbackSpeed === speed && <Check className="h-4 w-4 text-red-500" />}
                             </button>
                           ))}
                         </div>
@@ -513,30 +748,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                       <>
                         <button
                           onClick={() => setSettingsMenu('main')}
-                          className="w-full px-3 py-2 text-white/60 text-xs font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
+                          className="w-full px-4 py-2.5 text-white/80 text-sm font-medium border-b border-white/10 text-left hover:bg-white/5 flex items-center gap-2"
                         >
                           ← Quality
                         </button>
                         <div className="py-1">
                           <button
                             onClick={() => handleQualityChange(-1)}
-                            className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
-                              currentQuality === -1 ? 'text-white' : 'text-white/70'
+                            className={`w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                              currentQuality === -1 ? 'text-white bg-white/5' : 'text-white/70'
                             }`}
                           >
                             <span>Auto</span>
-                            {currentQuality === -1 && <Check className="h-4 w-4" />}
+                            {currentQuality === -1 && <Check className="h-4 w-4 text-red-500" />}
                           </button>
                           {availableQualities.map((quality) => (
                             <button
                               key={quality}
                               onClick={() => handleQualityChange(quality)}
-                              className={`w-full px-3 py-2 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
-                                currentQuality === quality ? 'text-white' : 'text-white/70'
+                              className={`w-full px-4 py-2.5 text-left text-sm flex items-center justify-between hover:bg-white/10 ${
+                                currentQuality === quality ? 'text-white bg-white/5' : 'text-white/70'
                               }`}
                             >
                               <span>{getQualityLabel(quality)}</span>
-                              {currentQuality === quality && <Check className="h-4 w-4" />}
+                              {currentQuality === quality && <Check className="h-4 w-4 text-red-500" />}
                             </button>
                           ))}
                         </div>
@@ -547,10 +782,35 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
               </AnimatePresence>
             </div>
 
+            {/* Theatre Mode */}
+            <button
+              onClick={() => setIsTheatreMode(!isTheatreMode)}
+              className={`p-2 transition-colors hidden sm:block ${isTheatreMode ? 'text-red-500' : 'text-white hover:text-white/80'}`}
+              title="Theatre mode"
+            >
+              {isTheatreMode ? (
+                <X className="h-5 w-5 sm:h-6 sm:w-6" />
+              ) : (
+                <RectangleHorizontal className="h-5 w-5 sm:h-6 sm:w-6" />
+              )}
+            </button>
+
+            {/* Picture in Picture */}
+            {document.pictureInPictureEnabled && (
+              <button
+                onClick={togglePiP}
+                className={`p-2 transition-colors ${isPiP ? 'text-red-500' : 'text-white hover:text-white/80'}`}
+                title="Picture in Picture (P)"
+              >
+                <PictureInPicture2 className="h-5 w-5 sm:h-6 sm:w-6" />
+              </button>
+            )}
+
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
               className="p-2 text-white hover:text-white/80 transition-colors"
+              title="Fullscreen (F)"
             >
               {isFullscreen ? (
                 <Minimize className="h-5 w-5 sm:h-6 sm:w-6" />
