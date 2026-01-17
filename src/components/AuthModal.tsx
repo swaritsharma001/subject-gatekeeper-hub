@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { KeyRound, Sparkles, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 const AuthModal: React.FC = () => {
   const { isAuthenticated, login } = useAuth();
+  const location = useLocation();
   const [inputKey, setInputKey] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,7 +27,8 @@ const AuthModal: React.FC = () => {
     }
   };
 
-  if (isAuthenticated) return null;
+  // Skip auth modal for admin page
+  if (isAuthenticated || location.pathname === '/admin') return null;
 
   return (
     <AnimatePresence>
