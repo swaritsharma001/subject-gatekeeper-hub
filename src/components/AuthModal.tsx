@@ -16,14 +16,11 @@ const AuthModal: React.FC = () => {
     setError('');
     setIsLoading(true);
 
-    // Simulate network delay for premium feel
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const success = login(inputKey.trim());
+    const success = await login(inputKey.trim());
     setIsLoading(false);
 
     if (!success) {
-      setError('Invalid auth key. Please try again.');
+      setError('Invalid or already used auth key.');
       setInputKey('');
     }
   };

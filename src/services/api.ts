@@ -16,9 +16,44 @@ export interface ApiLecture {
   link: string;
 }
 
+export interface AuthResponse {
+  token: string;
+  expiresAt: string;
+}
+
+// Get auth token from localStorage
+const getAuthToken = (): string | null => {
+  return localStorage.getItem('auth_token');
+};
+
+// Create headers with auth token
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: token } : {}),
+  };
+};
+
+// Use auth key to get token
+export const useAuthKey = async (authKey: string): Promise<AuthResponse> => {
+  const response = await fetch(`${API_BASE_URL}/key/use`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ authKey }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to authenticate');
+  }
+  return response.json();
+};
+
 // Fetch all subjects
 export const fetchSubjects = async (): Promise<ApiSubject[]> => {
-  const response = await fetch(`${API_BASE_URL}/subjects`);
+  const response = await fetch(`${API_BASE_URL}/subjects`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch subjects');
   }
@@ -27,7 +62,9 @@ export const fetchSubjects = async (): Promise<ApiSubject[]> => {
 
 // Fetch lectures by subject ID
 export const fetchLecturesBySubject = async (subjectId: string): Promise<ApiLecture[]> => {
-  const response = await fetch(`${API_BASE_URL}/lectures/${subjectId}`);
+  const response = await fetch(`${API_BASE_URL}/lectures/${subjectId}`, {
+    headers: getAuthHeaders(),
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch lectures');
   }
@@ -38,13 +75,24 @@ export const fetchLecturesBySubject = async (subjectId: string): Promise<ApiLect
 export const addSubject = async (data: { subject: string; id: string }): Promise<ApiSubject> => {
   const response = await fetch(`${API_BASE_URL}/subject/add`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!response.ok) {
     throw new Error('Failed to add subject');
   }
   return response.json();
+};
+
+// Delete a subject
+export const deleteSubject = async (id: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/subject/delete/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to delete subject');
+  }
 };
 
 // Add a new lecture
@@ -56,11 +104,22 @@ export const addLecture = async (data: {
 }): Promise<ApiLecture> => {
   const response = await fetch(`${API_BASE_URL}/lecture/add`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
   if (!response.ok) {
     throw new Error('Failed to add lecture');
   }
   return response.json();
+};
+
+// Delete a lecture
+export const deleteLecture = async (id: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/lecture/delete/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to delete lecture');
+  }
 };

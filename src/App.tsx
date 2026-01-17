@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Subject from "./pages/Subject";
 import Chapter from "./pages/Chapter";
 import Lecture from "./pages/Lecture";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/subject/:slug/chapter/:chapterId" element={<Chapter />} />
             <Route path="/subject/:slug/chapter/:chapterId/lecture/:lectureId" element={<Lecture />} />
             <Route path="/subject/:slug/lecture/:lectureId" element={<Lecture />} />
+            <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
