@@ -32,6 +32,14 @@ export interface AuthKey {
   createdAt?: string;
 }
 
+// Clear all auth cookies
+export const clearAuthCookies = () => {
+  document.cookie = 'auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  document.cookie = 'auth_expiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+  // Force page reload to show auth modal
+  window.location.reload();
+};
+
 // Get auth token from cookie
 const getAuthToken = (): string | null => {
   const cookies = document.cookie.split(';');
@@ -51,6 +59,15 @@ const getAuthHeaders = (): HeadersInit => {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: token } : {}),
   };
+};
+
+// Handle API errors - clear cookies on auth errors
+const handleApiError = (response: Response, errorMessage: string) => {
+  if (response.status === 401 || response.status === 403) {
+    // Auth error - clear cookies and reload
+    clearAuthCookies();
+  }
+  throw new Error(errorMessage);
 };
 
 // Use auth key to get token
@@ -109,7 +126,7 @@ export const fetchSubjects = async (): Promise<ApiSubject[]> => {
     headers: getAuthHeaders(),
   });
   if (!response.ok) {
-    throw new Error('Failed to fetch subjects');
+    handleApiError(response, 'Failed to fetch subjects');
   }
   return response.json();
 };
@@ -120,7 +137,7 @@ export const fetchLecturesBySubject = async (subjectId: string): Promise<ApiLect
     headers: getAuthHeaders(),
   });
   if (!response.ok) {
-    throw new Error('Failed to fetch lectures');
+    handleApiError(response, 'Failed to fetch lectures');
   }
   return response.json();
 };
@@ -133,7 +150,7 @@ export const addSubject = async (data: { subject: string; id: string }): Promise
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    throw new Error('Failed to add subject');
+    handleApiError(response, 'Failed to add subject');
   }
   return response.json();
 };
@@ -145,7 +162,7 @@ export const deleteSubject = async (id: string): Promise<void> => {
     headers: getAuthHeaders(),
   });
   if (!response.ok) {
-    throw new Error('Failed to delete subject');
+    handleApiError(response, 'Failed to delete subject');
   }
 };
 
@@ -162,7 +179,7 @@ export const addLecture = async (data: {
     body: JSON.stringify(data),
   });
   if (!response.ok) {
-    throw new Error('Failed to add lecture');
+    handleApiError(response, 'Failed to add lecture');
   }
   return response.json();
 };
@@ -174,6 +191,6 @@ export const deleteLecture = async (id: string): Promise<void> => {
     headers: getAuthHeaders(),
   });
   if (!response.ok) {
-    throw new Error('Failed to delete lecture');
+    handleApiError(response, 'Failed to delete lecture');
   }
 };
