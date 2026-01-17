@@ -1,21 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useLectures } from '@/hooks/useLectures';
-import { addSubject, addLecture, deleteSubject, deleteLecture } from '@/services/api';
+import { 
+  addSubject, 
+  addLecture, 
+  deleteSubject, 
+  deleteLecture,
+  fetchKeys,
+  createKey,
+  deleteKey,
+  AuthKey 
+} from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, BookOpen, Video, Loader2 } from 'lucide-react';
+import { Plus, Trash2, BookOpen, Video, Loader2, Key, LogOut, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const ADMIN_EMAIL = 'admin@mintgram.live';
+const ADMIN_PASSWORD = 'admin@mintgram.live';
 
 const Admin = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: subjects, isLoading: subjectsLoading } = useSubjects();
+  
+  // Admin auth state
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  
+  // Keys state
+  const [keys, setKeys] = useState<AuthKey[]>([]);
+  const [keysLoading, setKeysLoading] = useState(false);
+  const [keyName, setKeyName] = useState('');
+  const [keyType, setKeyType] = useState<'trial' | 'permanent'>('permanent');
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
   // Subject form state
   const [subjectName, setSubjectName] = useState('');
@@ -32,6 +59,81 @@ const Admin = () => {
   // View lectures state
   const [viewSubjectId, setViewSubjectId] = useState('');
   const { data: lectures, isLoading: lecturesLoading } = useLectures(viewSubjectId || undefined);
+
+  // Check admin session on mount
+  useEffect(() => {
+    const adminSession = localStorage.getItem('admin_session');
+    if (adminSession === 'true') {
+      setIsAdminLoggedIn(true);
+    }
+  }, []);
+
+  // Load keys when admin logs in
+  useEffect(() => {
+    if (isAdminLoggedIn) {
+      loadKeys();
+    }
+  }, [isAdminLoggedIn]);
+
+  const loadKeys = async () => {
+    setKeysLoading(true);
+    try {
+      const data = await fetchKeys();
+      setKeys(data);
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to load keys', variant: 'destructive' });
+    } finally {
+      setKeysLoading(false);
+    }
+  };
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminEmail === ADMIN_EMAIL && adminPassword === ADMIN_PASSWORD) {
+      setIsAdminLoggedIn(true);
+      localStorage.setItem('admin_session', 'true');
+      setLoginError('');
+    } else {
+      setLoginError('Invalid email or password');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminLoggedIn(false);
+    localStorage.removeItem('admin_session');
+  };
+
+  const handleCreateKey = async () => {
+    setCreatingKey(true);
+    try {
+      await createKey({ type: keyType, name: keyName || undefined });
+      toast({ title: 'Success', description: 'Key created successfully' });
+      setKeyName('');
+      setKeyType('permanent');
+      loadKeys();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to create key', variant: 'destructive' });
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleDeleteKey = async (id: string) => {
+    try {
+      await deleteKey(id);
+      toast({ title: 'Success', description: 'Key deleted successfully' });
+      loadKeys();
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to delete key', variant: 'destructive' });
+    }
+  };
+
+  const handleCopyKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(key);
+    toast({ title: 'Copied!', description: 'Key copied to clipboard' });
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const handleAddSubject = async () => {
     if (!subjectName.trim() || !subjectId.trim()) {
@@ -110,17 +212,178 @@ const Admin = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Admin Login Screen
+  if (!isAdminLoggedIn) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md"
+        >
+          <Card className="border-2">
+            <CardHeader className="text-center">
+              <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                <Key className="h-8 w-8 text-primary" />
+              </div>
+              <CardTitle className="text-2xl">Admin Login</CardTitle>
+              <p className="text-muted-foreground">Enter your admin credentials</p>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                />
+                <Input
+                  type="password"
+                  placeholder="Password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                />
+                {loginError && (
+                  <p className="text-destructive text-sm text-center">{loginError}</p>
+                )}
+                <Button type="submit" className="w-full">
+                  Login
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pt-20 pb-10 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-foreground mb-8">Admin Panel</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-foreground">Admin Panel</h1>
+          <Button variant="outline" onClick={handleAdminLogout}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+        </div>
         
-        <Tabs defaultValue="subjects" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-8">
+        <Tabs defaultValue="keys" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 mb-8">
+            <TabsTrigger value="keys">Auth Keys</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="lectures">Lectures</TabsTrigger>
             <TabsTrigger value="view">View All</TabsTrigger>
           </TabsList>
+          
+          {/* Keys Tab */}
+          <TabsContent value="keys">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  Create New Auth Key
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Input
+                  placeholder="Name (optional - leave empty to auto-generate)"
+                  value={keyName}
+                  onChange={(e) => setKeyName(e.target.value)}
+                />
+                <Select value={keyType} onValueChange={(v) => setKeyType(v as 'trial' | 'permanent')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="permanent">Permanent (365 days)</SelectItem>
+                    <SelectItem value="trial">Trial (24 hours)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleCreateKey} disabled={creatingKey} className="w-full">
+                  {creatingKey ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  Create Key
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Keys List */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>All Auth Keys</span>
+                  <Button variant="ghost" size="sm" onClick={loadKeys}>
+                    Refresh
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {keysLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : keys.length > 0 ? (
+                  <div className="space-y-3">
+                    <AnimatePresence>
+                      {keys.map((key) => (
+                        <motion.div
+                          key={key._id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="flex items-center justify-between p-4 bg-muted rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <code className="text-sm font-mono bg-background px-2 py-1 rounded">
+                                {key.authKey}
+                              </code>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => handleCopyKey(key.authKey)}
+                              >
+                                {copiedKey === key.authKey ? (
+                                  <Check className="h-3 w-3 text-green-500" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm">
+                              {key.name && (
+                                <span className="text-muted-foreground">{key.name}</span>
+                              )}
+                              <Badge variant={key.type === 'permanent' ? 'default' : 'secondary'}>
+                                {key.type}
+                              </Badge>
+                              <Badge variant={key.used ? 'destructive' : 'outline'}>
+                                {key.used ? 'Used' : 'Available'}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => handleDeleteKey(key._id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">No keys found</p>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
           
           {/* Subjects Tab */}
           <TabsContent value="subjects">

@@ -21,6 +21,17 @@ export interface AuthResponse {
   expiresAt: string;
 }
 
+export interface AuthKey {
+  _id: string;
+  authKey: string;
+  type: 'trial' | 'permanent';
+  used: boolean;
+  name?: string;
+  token?: string;
+  expiresAt?: string;
+  createdAt?: string;
+}
+
 // Get auth token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
@@ -48,6 +59,42 @@ export const useAuthKey = async (authKey: string): Promise<AuthResponse> => {
   }
   return response.json();
 };
+
+// ============ KEY MANAGEMENT APIs ============
+
+// Fetch all keys
+export const fetchKeys = async (): Promise<AuthKey[]> => {
+  const response = await fetch(`${API_BASE_URL}/keys`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch keys');
+  }
+  return response.json();
+};
+
+// Create a new key
+export const createKey = async (data: { type: 'trial' | 'permanent'; name?: string }): Promise<AuthKey> => {
+  const response = await fetch(`${API_BASE_URL}/key/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to create key');
+  }
+  return response.json();
+};
+
+// Delete a key
+export const deleteKey = async (id: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/key/delete/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to delete key');
+  }
+};
+
+// ============ SUBJECT APIs ============
 
 // Fetch all subjects
 export const fetchSubjects = async (): Promise<ApiSubject[]> => {
