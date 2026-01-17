@@ -788,13 +788,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
 
               <AnimatePresence>
                 {showSettings && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute bottom-16 sm:bottom-14 right-0 bg-black/95 rounded-xl overflow-hidden min-w-[280px] max-h-[70vh] overflow-y-auto shadow-2xl backdrop-blur-md border border-white/10"
-                  >
+                  <>
+                    {/* Mobile backdrop (prevents the menu from being clipped in portrait) */}
+                    <motion.button
+                      type="button"
+                      aria-label="Close settings"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSettings(false);
+                        setSettingsMenu('main');
+                      }}
+                      className="fixed inset-0 z-40 sm:hidden bg-black/40"
+                    />
+
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="fixed left-3 right-3 bottom-24 z-50 bg-black/95 rounded-xl overflow-hidden max-h-[70vh] overflow-y-auto shadow-2xl backdrop-blur-md border border-white/10 sm:absolute sm:left-auto sm:right-0 sm:bottom-14 sm:min-w-[280px]"
+                    >
                     {settingsMenu === 'main' && (
                       <div className="py-2">
                         <button
@@ -931,7 +947,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                         </div>
                       </>
                     )}
-                  </motion.div>
+                    </motion.div>
+                  </>
                 )}
               </AnimatePresence>
             </div>
