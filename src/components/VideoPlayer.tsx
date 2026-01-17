@@ -16,7 +16,11 @@ import {
   ChevronRight,
   Subtitles,
   Gauge,
-  Layers
+  Layers,
+  Repeat,
+  Wifi,
+  WifiOff,
+  SkipForward
 } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -72,6 +76,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     { label: 'Hindi', srclang: 'hi', src: '' },
     { label: 'Spanish', srclang: 'es', src: '' },
   ]);
+  
+  // New options for data saving
+  const [isLoopEnabled, setIsLoopEnabled] = useState(() => {
+    return localStorage.getItem('videoPlayerLoop') === 'true';
+  });
+  const [dataSaverMode, setDataSaverMode] = useState(() => {
+    return localStorage.getItem('videoPlayerDataSaver') === 'true';
+  });
+  const [autoplayNext, setAutoplayNext] = useState(() => {
+    return localStorage.getItem('videoPlayerAutoplay') !== 'false'; // default true
+  });
 
   const playbackSpeeds = [1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3];
 
@@ -87,9 +102,17 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
     };
 
     if (Hls.isSupported()) {
+      // Data-saving HLS config: smaller buffers = less pre-loading
       const hls = new Hls({
         autoStartLoad: true,
-        startLevel: -1,
+        startLevel: dataSaverMode ? 0 : -1, // Start with lowest quality in data saver mode
+        capLevelToPlayerSize: true, // Don't load higher quality than display size
+        maxBufferLength: dataSaverMode ? 15 : 30, // Reduced buffer in data saver
+        maxMaxBufferLength: dataSaverMode ? 30 : 600, // Max buffer limit
+        maxBufferSize: dataSaverMode ? 30 * 1000 * 1000 : 60 * 1000 * 1000, // 30MB vs 60MB
+        maxBufferHole: 0.5,
+        lowLatencyMode: false,
+        backBufferLength: dataSaverMode ? 30 : 90, // Keep less played content in memory
       });
       
       hlsRef.current = hls;
@@ -100,6 +123,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
         const qualities = data.levels.map((level) => level.height).filter(Boolean);
         setAvailableQualities([...new Set(qualities)].sort((a, b) => b - a));
         setIsLoading(false);
+        
+        // Cap quality in data saver mode (max 480p)
+        if (dataSaverMode) {
+          const maxLevel = hls.levels.findIndex(level => level.height <= 480);
+          if (maxLevel >= 0) {
+            hls.autoLevelCapping = maxLevel;
+          }
+        }
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
@@ -121,7 +152,48 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
       video.src = src;
       video.addEventListener('loadedmetadata', () => setIsLoading(false));
     }
-  }, [src]);
+  }, [src, dataSaverMode]);
+
+  // Apply loop setting
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      video.loop = isLoopEnabled;
+    }
+  }, [isLoopEnabled]);
+
+  // Handle data saver toggle
+  const toggleDataSaver = useCallback(() => {
+    const newValue = !dataSaverMode;
+    setDataSaverMode(newValue);
+    localStorage.setItem('videoPlayerDataSaver', String(newValue));
+    
+    // Apply immediately to HLS if available
+    if (hlsRef.current) {
+      if (newValue) {
+        const maxLevel = hlsRef.current.levels.findIndex(level => level.height <= 480);
+        if (maxLevel >= 0) {
+          hlsRef.current.autoLevelCapping = maxLevel;
+        }
+      } else {
+        hlsRef.current.autoLevelCapping = -1;
+      }
+    }
+  }, [dataSaverMode]);
+
+  // Handle loop toggle
+  const toggleLoop = useCallback(() => {
+    const newValue = !isLoopEnabled;
+    setIsLoopEnabled(newValue);
+    localStorage.setItem('videoPlayerLoop', String(newValue));
+  }, [isLoopEnabled]);
+
+  // Handle autoplay toggle
+  const toggleAutoplay = useCallback(() => {
+    const newValue = !autoplayNext;
+    setAutoplayNext(newValue);
+    localStorage.setItem('videoPlayerAutoplay', String(newValue));
+  }, [autoplayNext]);
 
   // Video event listeners
   useEffect(() => {
@@ -850,6 +922,67 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title }) => {
                           <div className="flex items-center gap-1 text-white/60">
                             <span>{currentSubtitle === 'off' ? 'Off' : availableSubtitles.find(s => s.srclang === currentSubtitle)?.label}</span>
                             <ChevronRight className="h-4 w-4" />
+                          </div>
+                        </button>
+                        
+                        {/* Divider */}
+                        <div className="my-2 border-t border-white/10" />
+                        
+                        {/* Data Saver Toggle */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleDataSaver();
+                          }}
+                          className="w-full px-4 py-3.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white active:bg-white/20"
+                        >
+                          <div className="flex items-center gap-3">
+                            {dataSaverMode ? (
+                              <WifiOff className="h-5 w-5 text-green-500" />
+                            ) : (
+                              <Wifi className="h-5 w-5 text-white/70" />
+                            )}
+                            <div className="flex flex-col">
+                              <span>Data Saver</span>
+                              <span className="text-xs text-white/50">Max 480p, less buffering</span>
+                            </div>
+                          </div>
+                          <div className={`w-10 h-6 rounded-full p-0.5 transition-colors ${dataSaverMode ? 'bg-green-500' : 'bg-white/20'}`}>
+                            <div className={`w-5 h-5 rounded-full bg-white transition-transform ${dataSaverMode ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </div>
+                        </button>
+                        
+                        {/* Loop Toggle */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleLoop();
+                          }}
+                          className="w-full px-4 py-3.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white active:bg-white/20"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Repeat className={`h-5 w-5 ${isLoopEnabled ? 'text-red-500' : 'text-white/70'}`} />
+                            <span>Loop Video</span>
+                          </div>
+                          <div className={`w-10 h-6 rounded-full p-0.5 transition-colors ${isLoopEnabled ? 'bg-red-500' : 'bg-white/20'}`}>
+                            <div className={`w-5 h-5 rounded-full bg-white transition-transform ${isLoopEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                          </div>
+                        </button>
+                        
+                        {/* Autoplay Next Toggle */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleAutoplay();
+                          }}
+                          className="w-full px-4 py-3.5 text-left text-sm flex items-center justify-between hover:bg-white/10 text-white active:bg-white/20"
+                        >
+                          <div className="flex items-center gap-3">
+                            <SkipForward className={`h-5 w-5 ${autoplayNext ? 'text-red-500' : 'text-white/70'}`} />
+                            <span>Autoplay Next</span>
+                          </div>
+                          <div className={`w-10 h-6 rounded-full p-0.5 transition-colors ${autoplayNext ? 'bg-red-500' : 'bg-white/20'}`}>
+                            <div className={`w-5 h-5 rounded-full bg-white transition-transform ${autoplayNext ? 'translate-x-4' : 'translate-x-0'}`} />
                           </div>
                         </button>
                       </div>
