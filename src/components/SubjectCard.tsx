@@ -1,17 +1,17 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LucideIcon } from 'lucide-react';
 
 interface SubjectCardProps {
   title: string;
-  icon: LucideIcon;
+  icon: React.ElementType;
   slug: string;
   color: string;
+  totalVideos?: number;
   delay?: number;
 }
 
-const SubjectCard: React.FC<SubjectCardProps> = ({ title, icon: Icon, slug, color, delay = 0 }) => {
+const SubjectCard: React.FC<SubjectCardProps> = ({ title, icon: Icon, slug, color, totalVideos, delay = 0 }) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
@@ -41,6 +41,13 @@ const SubjectCard: React.FC<SubjectCardProps> = ({ title, icon: Icon, slug, colo
           <h3 className="font-display text-xl font-bold text-foreground">
             {title}
           </h3>
+
+          {/* Video count */}
+          {totalVideos !== undefined && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {totalVideos} {totalVideos === 1 ? 'Video' : 'Videos'}
+            </p>
+          )}
 
           {/* Arrow indicator */}
           <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground transition-colors group-hover:text-primary">

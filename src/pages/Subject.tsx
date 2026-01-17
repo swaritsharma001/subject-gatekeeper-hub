@@ -1,11 +1,10 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BookOpen, Calculator, FlaskConical, Languages, BookOpenText } from 'lucide-react';
-import LectureCard from '@/components/LectureCard';
-import ChapterCard from '@/components/ChapterCard';
+import { ArrowLeft, BookOpen, Calculator, FlaskConical, Languages, BookOpenText, Play, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getSubject } from '@/data/courseData';
+import { useLectures } from '@/hooks/useLectures';
+import { useSubjects } from '@/hooks/useSubjects';
 
 const subjectIcons: Record<string, React.ElementType> = {
   hindi: Languages,
@@ -16,10 +15,13 @@ const subjectIcons: Record<string, React.ElementType> = {
 
 const Subject: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
-  const subject = getSubject(slug || '');
-  const IconComponent = subjectIcons[slug || ''] || BookOpen;
+  const { data: subjects } = useSubjects();
+  const { data: lectures, isLoading, error } = useLectures(slug);
+  
+  const subject = subjects?.find(s => s.id === slug);
+  const IconComponent = subjectIcons[slug?.toLowerCase() || ''] || BookOpen;
 
-  if (!subject) {
+  if (!slug) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Subject not found</p>
@@ -56,11 +58,9 @@ const Subject: React.FC = () => {
             </div>
             <div>
               <h1 className="font-display text-3xl font-bold text-foreground">
-                {subject.title}
+                {subject?.subject || slug}
               </h1>
-              <p className="text-muted-foreground">
-                {subject.hasChapters ? 'All Chapters' : 'All Lectures'}
-              </p>
+              <p className="text-muted-foreground">All Lectures</p>
             </div>
           </div>
         </motion.div>
@@ -73,40 +73,74 @@ const Subject: React.FC = () => {
           className="mb-6"
         >
           <span className="inline-flex items-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-            {subject.hasChapters 
-              ? `${subject.chapters?.length || 0} Chapters`
-              : `${subject.lectures?.length || 0} Lectures`
-            }
+            {lectures?.length || 0} Lectures
           </span>
         </motion.div>
 
-        {/* Content */}
-        <div className="mx-auto max-w-2xl space-y-4">
-          {subject.hasChapters ? (
-            // Show chapters
-            subject.chapters?.map((chapter, index) => (
-              <ChapterCard
-                key={chapter.id}
-                chapter={chapter}
-                chapterNumber={chapter.id}
-                subjectSlug={slug || ''}
-                delay={0.2 + index * 0.08}
-              />
-            ))
-          ) : (
-            // Show lectures directly
-            subject.lectures?.map((lecture, index) => (
-              <LectureCard
-                key={lecture.id}
-                title={lecture.title}
-                lectureNumber={lecture.id}
-                duration="--:--"
-                subjectSlug={slug || ''}
-                delay={0.2 + index * 0.08}
-              />
-            ))
-          )}
-        </div>
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="ml-3 text-muted-foreground">Loading lectures...</span>
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && (
+          <div className="mx-auto max-w-md rounded-xl bg-destructive/10 p-6 text-center">
+            <p className="text-destructive">Failed to load lectures. Please try again later.</p>
+          </div>
+        )}
+
+        {/* Lectures list */}
+        {lectures && lectures.length > 0 && (
+          <div className="mx-auto max-w-2xl space-y-4">
+            {lectures.map((lecture, index) => (
+              <motion.div
+                key={lecture._id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 + index * 0.08, type: 'spring', damping: 20 }}
+              >
+                <Link to={`/subject/${slug}/lecture/${lecture._id}`}>
+                  <motion.div
+                    whileHover={{ scale: 1.01, x: 8 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="group flex items-center gap-4 rounded-xl bg-card p-4 shadow-card transition-all duration-200 hover:shadow-card-hover"
+                  >
+                    {/* Play button */}
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 transition-colors group-hover:gradient-primary">
+                      <Play className="h-5 w-5 text-primary transition-colors group-hover:text-primary-foreground" />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-muted-foreground">
+                        Lecture {index + 1}
+                      </p>
+                      <h3 className="font-semibold text-foreground truncate">
+                        {lecture.title}
+                      </h3>
+                    </div>
+
+                    {/* Duration badge */}
+                    <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                      {lecture.duration}
+                    </span>
+                  </motion.div>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {lectures && lectures.length === 0 && (
+          <div className="mx-auto max-w-md rounded-xl bg-card p-8 text-center shadow-card">
+            <Play className="mx-auto h-12 w-12 text-muted-foreground" />
+            <p className="mt-4 text-muted-foreground">No lectures available yet.</p>
+          </div>
+        )}
       </div>
     </div>
   );

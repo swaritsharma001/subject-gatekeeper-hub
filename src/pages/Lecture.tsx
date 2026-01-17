@@ -1,27 +1,48 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, BookOpen } from 'lucide-react';
+import { ArrowLeft, BookOpen, Loader2 } from 'lucide-react';
 import VideoPlayer from '@/components/VideoPlayer';
 import YouTubePlayer from '@/components/YouTubePlayer';
 import { Button } from '@/components/ui/button';
-import { getSubject, getLecture, getChapter } from '@/data/courseData';
+import { useLectures } from '@/hooks/useLectures';
+import { useSubjects } from '@/hooks/useSubjects';
+
+// Helper to detect video type from URL
+const getVideoType = (url: string): 'youtube' | 'hls' => {
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    return 'youtube';
+  }
+  return 'hls';
+};
 
 const Lecture: React.FC = () => {
-  const { slug, chapterId, lectureId } = useParams<{ 
+  const { slug, lectureId } = useParams<{ 
     slug: string; 
-    chapterId?: string; 
     lectureId: string;
   }>();
   
-  const subject = getSubject(slug || '');
-  const lectureNum = parseInt(lectureId || '1', 10);
-  const chapterNum = chapterId ? parseInt(chapterId, 10) : undefined;
+  const { data: subjects } = useSubjects();
+  const { data: lectures, isLoading, error } = useLectures(slug);
   
-  const result = getLecture(slug || '', lectureNum, chapterNum);
-  const chapter = chapterNum ? getChapter(slug || '', chapterNum) : undefined;
+  const subject = subjects?.find(s => s.id === slug);
+  const lecture = lectures?.find(l => l._id === lectureId);
+  const lectureIndex = lectures?.findIndex(l => l._id === lectureId) ?? -1;
+  
+  // Get prev/next lectures
+  const prevLecture = lectureIndex > 0 ? lectures?.[lectureIndex - 1] : null;
+  const nextLecture = lectures && lectureIndex < lectures.length - 1 ? lectures[lectureIndex + 1] : null;
 
-  if (!subject || !result) {
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-3 text-muted-foreground">Loading lecture...</span>
+      </div>
+    );
+  }
+
+  if (error || !lecture) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Lecture not found</p>
@@ -29,23 +50,9 @@ const Lecture: React.FC = () => {
     );
   }
 
-  const { lecture } = result;
-  const backUrl = chapter 
-    ? `/subject/${slug}/chapter/${chapterId}` 
-    : `/subject/${slug}`;
-  const backText = chapter ? chapter.title : subject.title;
-
-  // Get prev/next lecture
-  const lectures = chapter?.lectures || subject.lectures || [];
-  const currentIndex = lectures.findIndex(l => l.id === lecture.id);
-  const prevLecture = currentIndex > 0 ? lectures[currentIndex - 1] : null;
-  const nextLecture = currentIndex < lectures.length - 1 ? lectures[currentIndex + 1] : null;
-
-  const getLectureUrl = (lid: number) => {
-    return chapter 
-      ? `/subject/${slug}/chapter/${chapterId}/lecture/${lid}`
-      : `/subject/${slug}/lecture/${lid}`;
-  };
+  const videoType = getVideoType(lecture.link);
+  const backUrl = `/subject/${slug}`;
+  const backText = subject?.subject || slug || 'Subjects';
 
   return (
     <div className="min-h-screen bg-background">
@@ -72,15 +79,9 @@ const Lecture: React.FC = () => {
         >
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <BookOpen className="h-4 w-4" />
-            <span>{subject.title}</span>
-            {chapter && (
-              <>
-                <span>•</span>
-                <span>Chapter {chapter.id}</span>
-              </>
-            )}
+            <span>{subject?.subject || slug}</span>
             <span>•</span>
-            <span>Lecture {lecture.id}</span>
+            <span>Lecture {lectureIndex + 1}</span>
           </div>
           <h1 className="mt-2 font-display text-2xl font-bold text-foreground sm:text-3xl">
             {lecture.title}
@@ -94,10 +95,10 @@ const Lecture: React.FC = () => {
           transition={{ delay: 0.2 }}
           className="mx-auto max-w-4xl"
         >
-          {lecture.type === 'youtube' ? (
-            <YouTubePlayer url={lecture.videoUrl} title={lecture.title} />
+          {videoType === 'youtube' ? (
+            <YouTubePlayer url={lecture.link} title={lecture.title} />
           ) : (
-            <VideoPlayer src={lecture.videoUrl} title={lecture.title} />
+            <VideoPlayer src={lecture.link} title={lecture.title} />
           )}
         </motion.div>
 
@@ -112,17 +113,14 @@ const Lecture: React.FC = () => {
             About this Lecture
           </h2>
           <p className="mt-2 text-muted-foreground">
-            {chapter 
-              ? `This is Lecture ${lecture.id} from Chapter ${chapter.id}: ${chapter.title}. `
-              : `This lecture covers important concepts in ${subject.title}. `
-            }
-            Take notes and practice the exercises to reinforce your learning.
+            This lecture covers important concepts in {subject?.subject || 'this subject'}. 
+            Duration: {lecture.duration}. Take notes and practice the exercises to reinforce your learning.
           </p>
 
           {/* Navigation buttons */}
           <div className="mt-6 flex flex-wrap gap-3">
             {prevLecture && (
-              <Link to={getLectureUrl(prevLecture.id)}>
+              <Link to={`/subject/${slug}/lecture/${prevLecture._id}`}>
                 <Button variant="outline" className="gap-2">
                   <ArrowLeft className="h-4 w-4" />
                   Previous Lecture
@@ -130,7 +128,7 @@ const Lecture: React.FC = () => {
               </Link>
             )}
             {nextLecture && (
-              <Link to={getLectureUrl(nextLecture.id)}>
+              <Link to={`/subject/${slug}/lecture/${nextLecture._id}`}>
                 <Button className="gap-2 gradient-primary text-primary-foreground hover:opacity-90">
                   Next Lecture
                   <span>→</span>
