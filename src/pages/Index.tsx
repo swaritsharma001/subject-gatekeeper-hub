@@ -98,7 +98,7 @@ const Index: React.FC = () => {
               <img 
                 src={logo} 
                 alt="StudyX Logo" 
-                className="relative h-28 w-28 object-contain drop-shadow-2xl animate-float mx-auto" 
+                className="relative h-28 w-28 object-contain drop-shadow-2xl animate-float mx-auto rounded-full" 
               />
             </motion.div>
 
