@@ -36,8 +36,8 @@ const Index: React.FC = () => {
           transition={{ duration: 0.5 }}
           className="mb-12 text-center"
         >
-          <h1 className="font-display text-4xl font-bold text-foreground sm:text-5xl">
-            Study → All Subjects
+          <h1 className="font-display text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent sm:text-5xl">
+            StudyX → All Subjects
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
             Choose a subject to start your learning journey

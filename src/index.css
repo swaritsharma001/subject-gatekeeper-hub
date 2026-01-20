@@ -15,82 +15,90 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 217 91% 60%;
+    --primary: 199 89% 48%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 263 70% 75%;
-    --secondary-foreground: 263 70% 20%;
+    --secondary: 32 95% 55%;
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 220 20% 96%;
     --muted-foreground: 220 10% 45%;
 
-    --accent: 263 70% 95%;
-    --accent-foreground: 263 70% 35%;
+    --accent: 199 89% 95%;
+    --accent-foreground: 199 89% 35%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 220 20% 90%;
     --input: 220 20% 90%;
-    --ring: 217 91% 60%;
+    --ring: 199 89% 48%;
 
     --radius: 0.75rem;
 
-    /* Custom tokens */
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%) 0%, hsl(263 70% 65%) 100%);
+    /* Custom tokens - premium cyan & orange */
+    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(32 95% 55%) 100%);
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 30% 98%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(220 30% 98%) 0%, hsl(263 70% 97%) 50%, hsl(217 91% 97%) 100%);
-    --shadow-card: 0 4px 20px -4px hsl(217 91% 60% / 0.15);
-    --shadow-hover: 0 8px 30px -4px hsl(217 91% 60% / 0.25);
+    --gradient-hero: linear-gradient(135deg, hsl(220 30% 98%) 0%, hsl(199 89% 97%) 50%, hsl(32 95% 97%) 100%);
+    --shadow-card: 0 4px 20px -4px hsl(199 89% 48% / 0.15);
+    --shadow-hover: 0 8px 30px -4px hsl(199 89% 48% / 0.25);
     --shadow-modal: 0 25px 50px -12px hsl(222 47% 11% / 0.25);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-ring: 199 89% 48%;
   }
 
   .dark {
-    --background: 222 47% 8%;
+    --background: 222 47% 6%;
     --foreground: 220 30% 98%;
 
-    --card: 222 47% 11%;
+    --card: 222 47% 10%;
     --card-foreground: 220 30% 98%;
 
-    --popover: 222 47% 11%;
+    --popover: 222 47% 10%;
     --popover-foreground: 220 30% 98%;
 
-    --primary: 217 91% 60%;
+    --primary: 199 89% 48%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 263 70% 50%;
+    --secondary: 32 95% 55%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 222 47% 15%;
+    --muted: 222 47% 14%;
     --muted-foreground: 220 20% 65%;
 
-    --accent: 263 70% 20%;
-    --accent-foreground: 263 70% 90%;
+    --accent: 199 89% 15%;
+    --accent-foreground: 199 89% 90%;
 
-    --destructive: 0 62% 30%;
+    --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 47% 18%;
-    --input: 222 47% 18%;
-    --ring: 217 91% 60%;
+    --border: 222 47% 16%;
+    --input: 222 47% 16%;
+    --ring: 199 89% 48%;
 
-    --sidebar-background: 222 47% 8%;
+    /* Custom tokens - premium cyan & orange */
+    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(32 95% 55%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(222 47% 10%) 0%, hsl(222 47% 8%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(222 47% 6%) 0%, hsl(199 89% 10%) 50%, hsl(32 95% 10%) 100%);
+    --shadow-card: 0 4px 20px -4px hsl(199 89% 48% / 0.2);
+    --shadow-hover: 0 8px 30px -4px hsl(199 89% 48% / 0.35);
+    --shadow-modal: 0 25px 50px -12px hsl(0 0% 0% / 0.5);
+
+    --sidebar-background: 222 47% 6%;
     --sidebar-foreground: 220 30% 90%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 199 89% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 15%;
+    --sidebar-accent: 222 47% 14%;
     --sidebar-accent-foreground: 220 30% 90%;
-    --sidebar-border: 222 47% 18%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 222 47% 16%;
+    --sidebar-ring: 199 89% 48%;
   }
 }
 
