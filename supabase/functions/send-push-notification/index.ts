@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { ApplicationServer, PushMessageError } from "jsr:@negrel/webpush@0.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +26,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-async function importVapidKeyPair(vapidPublicKeyB64Url: string, vapidPrivateKeyB64Url: string) {
+async function importVapidSigningKey(vapidPublicKeyB64Url: string, vapidPrivateKeyB64Url: string) {
   // VAPID public key is the uncompressed P-256 point: 65 bytes => 0x04 || X(32) || Y(32)
   const pub = base64UrlToBytes(vapidPublicKeyB64Url);
   if (pub.length !== 65 || pub[0] !== 0x04) {
@@ -37,37 +36,51 @@ async function importVapidKeyPair(vapidPublicKeyB64Url: string, vapidPrivateKeyB
   const x = pub.slice(1, 33);
   const y = pub.slice(33, 65);
 
-  const publicJwk: JsonWebKey = {
+  const jwk: JsonWebKey = {
     kty: "EC",
     crv: "P-256",
     x: bytesToBase64Url(x),
     y: bytesToBase64Url(y),
+    d: vapidPrivateKeyB64Url,
+    key_ops: ["sign"],
     ext: true,
   };
 
-  const privateJwk: JsonWebKey = {
-    ...publicJwk,
-    d: vapidPrivateKeyB64Url,
-    key_ops: ["sign"],
-  };
-
-  const publicKey = await crypto.subtle.importKey(
+  return await crypto.subtle.importKey(
     "jwk",
-    publicJwk,
+    jwk,
     { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["verify"],
-  );
-
-  const privateKey = await crypto.subtle.importKey(
-    "jwk",
-    privateJwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
+    false,
     ["sign"],
   );
+}
 
-  return { publicKey, privateKey };
+function encodeJwtPart(obj: unknown): string {
+  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(obj)));
+}
+
+async function forgeVapidJwt(params: {
+  endpoint: string;
+  subject: string;
+  signingKey: CryptoKey;
+}) {
+  const header = { alg: "ES256", typ: "JWT" };
+  const aud = new URL(params.endpoint).origin;
+
+  const payload = {
+    aud,
+    exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
+    sub: params.subject,
+  };
+
+  const unsigned = `${encodeJwtPart(header)}.${encodeJwtPart(payload)}`;
+  const sigBuf = await crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    params.signingKey,
+    new TextEncoder().encode(unsigned),
+  );
+
+  return `${unsigned}.${bytesToBase64Url(new Uint8Array(sigBuf))}`;
 }
 
 serve(async (req) => {
@@ -89,9 +102,13 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // NOTE: Lovable Cloud edge runtime does not support WebCrypto ECDH,
+    // so payload encryption (RFC8291) isn't available. We send an *empty* push.
+    // The service worker will still fire the `push` event and show its default UI.
+
     const baseQuery = supabase
       .from("push_subscriptions")
-      .select("endpoint,p256dh,auth");
+      .select("endpoint");
 
     const { data: subscriptions, error: subErr } = endpoint
       ? await baseQuery.eq("endpoint", endpoint)
@@ -102,62 +119,56 @@ serve(async (req) => {
       throw subErr;
     }
 
-    console.log(`Sending push to ${subscriptions?.length || 0} subscribers`);
+    console.log(`Sending push ping to ${subscriptions?.length || 0} subscribers`);
 
-    const vapidKeys = await importVapidKeyPair(vapidPublicKey, vapidPrivateKey);
-
-    const appServer = new ApplicationServer({
-      contactInformation: "mailto:admin@studyx.app",
-      // The library expects a CryptoKeyPair for both `keys` and `vapidKeys`.
-      // Our VAPID keys are imported above.
-      keys: vapidKeys,
-      vapidKeys,
-    });
-
-    const payload = {
-      title: title || "StudyX",
-      body: body || "New content available!",
-      icon: icon || "/pwa-192x192.png",
-      url: url || "/",
-    };
+    const signingKey = await importVapidSigningKey(vapidPublicKey, vapidPrivateKey);
 
     let sent = 0;
     let failed = 0;
 
     for (const sub of subscriptions || []) {
       try {
-        const subscriber = appServer.subscribe({
+        const jwt = await forgeVapidJwt({
           endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth,
+          subject: "mailto:admin@studyx.app",
+          signingKey,
+        });
+
+        // IMPORTANT: Empty body => no encryption needed.
+        const res = await fetch(sub.endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `vapid t=${jwt}, k=${vapidPublicKey}`,
+            TTL: "60",
           },
         });
 
-        await subscriber.pushTextMessage(JSON.stringify(payload), {
-          ttl: 60,
-        });
-
-        sent++;
+        if (res.ok) {
+          sent++;
+        } else {
+          failed++;
+          // 404/410 => subscription is gone
+          if (res.status === 404 || res.status === 410) {
+            await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+          }
+          console.error("Push service rejected:", res.status, await res.text());
+        }
       } catch (e) {
         failed++;
-        console.error("Error sending to subscription:", e);
-
-        // If push service indicates the subscription is gone, delete it.
-        if (e instanceof PushMessageError && e.isGone()) {
-          await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
-        }
+        console.error("Error sending push:", e);
       }
     }
 
     console.log(`Push results: ${sent} sent, ${failed} failed`);
 
+    // Return the message we *intended* to send (for UI debugging)
     return new Response(
       JSON.stringify({
         success: true,
         sent,
         failed,
         total: subscriptions?.length || 0,
+        debug_message: { title, body, icon, url },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
