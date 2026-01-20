@@ -1,72 +1,73 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ApplicationServer, PushMessageError } from "jsr:@negrel/webpush@0.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Web Push implementation
-async function sendWebPushNotification(
-  subscription: { endpoint: string; p256dh: string; auth: string },
-  payload: string,
-  vapidPublicKey: string,
-  vapidPrivateKey: string
-) {
-  const encoder = new TextEncoder();
-  
-  // Import the VAPID private key
-  const privateKeyBytes = Uint8Array.from(atob(vapidPrivateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-  
-  // Create JWT for VAPID
-  const jwtHeader = { alg: "ES256", typ: "JWT" };
-  const audience = new URL(subscription.endpoint).origin;
-  const jwtPayload = {
-    aud: audience,
-    exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
-    sub: "mailto:admin@studyx.app",
+type ReqBody = {
+  title?: string;
+  body?: string;
+  icon?: string;
+  url?: string;
+  endpoint?: string;
+};
+
+function base64UrlToBytes(input: string): Uint8Array {
+  const padding = "=".repeat((4 - (input.length % 4)) % 4);
+  const base64 = (input + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+function bytesToBase64Url(bytes: Uint8Array): string {
+  const b64 = btoa(String.fromCharCode(...bytes));
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function importVapidKeyPair(vapidPublicKeyB64Url: string, vapidPrivateKeyB64Url: string) {
+  // VAPID public key is the uncompressed P-256 point: 65 bytes => 0x04 || X(32) || Y(32)
+  const pub = base64UrlToBytes(vapidPublicKeyB64Url);
+  if (pub.length !== 65 || pub[0] !== 0x04) {
+    throw new Error("Invalid VAPID public key format");
+  }
+
+  const x = pub.slice(1, 33);
+  const y = pub.slice(33, 65);
+
+  const publicJwk: JsonWebKey = {
+    kty: "EC",
+    crv: "P-256",
+    x: bytesToBase64Url(x),
+    y: bytesToBase64Url(y),
+    ext: true,
   };
 
-  const base64urlEncode = (data: Uint8Array) => {
-    return btoa(String.fromCharCode(...data))
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+  const privateJwk: JsonWebKey = {
+    ...publicJwk,
+    d: vapidPrivateKeyB64Url,
+    key_ops: ["sign"],
   };
 
-  const headerB64 = base64urlEncode(encoder.encode(JSON.stringify(jwtHeader)));
-  const payloadB64 = base64urlEncode(encoder.encode(JSON.stringify(jwtPayload)));
-  const unsignedToken = `${headerB64}.${payloadB64}`;
-
-  // Sign the JWT
-  const privateKey = await crypto.subtle.importKey(
-    "raw",
-    privateKeyBytes,
+  const publicKey = await crypto.subtle.importKey(
+    "jwk",
+    publicJwk,
     { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"]
+    true,
+    ["verify"],
   );
 
-  const signature = await crypto.subtle.sign(
-    { name: "ECDSA", hash: { name: "SHA-256" } },
-    privateKey,
-    encoder.encode(unsignedToken)
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    privateJwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign"],
   );
 
-  const jwt = `${unsignedToken}.${base64urlEncode(new Uint8Array(signature))}`;
-
-  // Send the push notification
-  const response = await fetch(subscription.endpoint, {
-    method: "POST",
-    headers: {
-      "Authorization": `vapid t=${jwt}, k=${vapidPublicKey}`,
-      "Content-Type": "application/octet-stream",
-      "TTL": "86400",
-    },
-    body: payload,
-  });
-
-  return response.ok;
+  return { publicKey, privateKey };
 }
 
 serve(async (req) => {
@@ -75,8 +76,8 @@ serve(async (req) => {
   }
 
   try {
-    const { title, body, icon, url, endpoint } = await req.json();
-    
+    const { title, body, icon, url, endpoint }: ReqBody = await req.json();
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY")!;
@@ -88,87 +89,85 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // If an endpoint is provided, send only to that subscription
-    let subscriptions;
-    if (endpoint) {
-      const { data, error } = await supabase
-        .from("push_subscriptions")
-        .select("*")
-        .eq("endpoint", endpoint);
+    const baseQuery = supabase
+      .from("push_subscriptions")
+      .select("endpoint,p256dh,auth");
 
-      if (error) {
-        console.error("Error fetching subscription:", error);
-        throw error;
-      }
-      subscriptions = data;
-    } else {
-      // Get all push subscriptions
-      const { data, error } = await supabase
-        .from("push_subscriptions")
-        .select("*");
+    const { data: subscriptions, error: subErr } = endpoint
+      ? await baseQuery.eq("endpoint", endpoint)
+      : await baseQuery;
 
-      if (error) {
-        console.error("Error fetching subscriptions:", error);
-        throw error;
-      }
-      subscriptions = data;
+    if (subErr) {
+      console.error("Error fetching subscriptions:", subErr);
+      throw subErr;
     }
 
     console.log(`Sending push to ${subscriptions?.length || 0} subscribers`);
 
-    const payload = JSON.stringify({
+    const vapidKeys = await importVapidKeyPair(vapidPublicKey, vapidPrivateKey);
+
+    const appServer = new ApplicationServer({
+      contactInformation: "mailto:admin@studyx.app",
+      // The library expects a CryptoKeyPair for both `keys` and `vapidKeys`.
+      // Our VAPID keys are imported above.
+      keys: vapidKeys,
+      vapidKeys,
+    });
+
+    const payload = {
       title: title || "StudyX",
       body: body || "New content available!",
       icon: icon || "/pwa-192x192.png",
       url: url || "/",
-    });
+    };
 
-    let successCount = 0;
-    let failCount = 0;
+    let sent = 0;
+    let failed = 0;
 
-    // Send to all subscriptions
     for (const sub of subscriptions || []) {
       try {
-        const success = await sendWebPushNotification(
-          { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
-          payload,
-          vapidPublicKey,
-          vapidPrivateKey
-        );
-        
-        if (success) {
-          successCount++;
-        } else {
-          failCount++;
-          // Remove invalid subscription
-          await supabase
-            .from("push_subscriptions")
-            .delete()
-            .eq("endpoint", sub.endpoint);
-        }
+        const subscriber = appServer.subscribe({
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth,
+          },
+        });
+
+        await subscriber.pushTextMessage(JSON.stringify(payload), {
+          ttl: 60,
+        });
+
+        sent++;
       } catch (e) {
+        failed++;
         console.error("Error sending to subscription:", e);
-        failCount++;
+
+        // If push service indicates the subscription is gone, delete it.
+        if (e instanceof PushMessageError && e.isGone()) {
+          await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+        }
       }
     }
 
-    console.log(`Push results: ${successCount} sent, ${failCount} failed`);
+    console.log(`Push results: ${sent} sent, ${failed} failed`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        sent: successCount, 
-        failed: failCount,
+      JSON.stringify({
+        success: true,
+        sent,
+        failed,
         total: subscriptions?.length || 0,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error: unknown) {
     console.error("Send push error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });
+
