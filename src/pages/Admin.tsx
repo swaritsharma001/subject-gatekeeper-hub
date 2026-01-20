@@ -12,13 +12,15 @@ import {
   deleteKey,
   AuthKey 
 } from '@/services/api';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, BookOpen, Video, Loader2, Key, LogOut, Copy, Check, Users, KeyRound, Shield, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, BookOpen, Video, Loader2, Key, LogOut, Copy, Check, Users, KeyRound, Shield, BarChart3, Bell, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -56,6 +58,12 @@ const Admin = () => {
   const [lectureLink, setLectureLink] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [addingLecture, setAddingLecture] = useState(false);
+  
+  // Push notification state
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationBody, setNotificationBody] = useState('');
+  const [notificationUrl, setNotificationUrl] = useState('/');
+  const [sendingNotification, setSendingNotification] = useState(false);
   
   // View lectures state
   const [viewSubjectId, setViewSubjectId] = useState('');
@@ -219,6 +227,39 @@ const Admin = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleSendNotification = async () => {
+    if (!notificationTitle.trim() || !notificationBody.trim()) {
+      toast({ title: 'Error', description: 'Please fill title and message', variant: 'destructive' });
+      return;
+    }
+    
+    setSendingNotification(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-push-notification', {
+        body: {
+          title: notificationTitle,
+          body: notificationBody,
+          url: notificationUrl || '/',
+        },
+      });
+
+      if (error) throw error;
+
+      toast({ 
+        title: 'Notification Sent! 🔔', 
+        description: `Sent to ${data?.sent || 0} subscribers` 
+      });
+      setNotificationTitle('');
+      setNotificationBody('');
+      setNotificationUrl('/');
+    } catch (error) {
+      console.error('Send notification error:', error);
+      toast({ title: 'Error', description: 'Failed to send notification', variant: 'destructive' });
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
   // Admin Login Screen
   if (!isAdminLoggedIn) {
     return (
@@ -276,11 +317,15 @@ const Admin = () => {
         </div>
         
         <Tabs defaultValue="keys" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
-            <TabsTrigger value="keys">Auth Keys</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5 mb-8">
+            <TabsTrigger value="keys">Keys</TabsTrigger>
             <TabsTrigger value="subjects">Subjects</TabsTrigger>
             <TabsTrigger value="lectures">Lectures</TabsTrigger>
-            <TabsTrigger value="view">View All</TabsTrigger>
+            <TabsTrigger value="notifications">
+              <Bell className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Notify</span>
+            </TabsTrigger>
+            <TabsTrigger value="view">View</TabsTrigger>
           </TabsList>
           
           {/* Keys Tab */}
@@ -697,6 +742,114 @@ const Admin = () => {
                     )}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Notifications Tab */}
+          <TabsContent value="notifications">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Send Push Notification
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Send a notification to all students who have enabled push notifications
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Title</label>
+                  <Input
+                    placeholder="e.g., New Lecture Available! 📚"
+                    value={notificationTitle}
+                    onChange={(e) => setNotificationTitle(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Message</label>
+                  <Textarea
+                    placeholder="e.g., Check out the new Physics lecture on Quantum Mechanics"
+                    value={notificationBody}
+                    onChange={(e) => setNotificationBody(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Link (optional)</label>
+                  <Input
+                    placeholder="e.g., /subject/physics"
+                    value={notificationUrl}
+                    onChange={(e) => setNotificationUrl(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Where should the notification take users when clicked?
+                  </p>
+                </div>
+                <Button 
+                  onClick={handleSendNotification} 
+                  disabled={sendingNotification || !notificationTitle.trim() || !notificationBody.trim()}
+                  className="w-full"
+                >
+                  {sendingNotification ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Send Notification
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Quick Templates */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-lg">Quick Templates</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left h-auto py-3"
+                  onClick={() => {
+                    setNotificationTitle('New Lecture Available! 📚');
+                    setNotificationBody('A new lecture has been added. Check it out now!');
+                    setNotificationUrl('/');
+                  }}
+                >
+                  <div>
+                    <p className="font-medium">New Lecture</p>
+                    <p className="text-xs text-muted-foreground">Announce a new lecture</p>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left h-auto py-3"
+                  onClick={() => {
+                    setNotificationTitle('Study Reminder 📖');
+                    setNotificationBody("Don't forget to continue your learning journey today!");
+                    setNotificationUrl('/dashboard');
+                  }}
+                >
+                  <div>
+                    <p className="font-medium">Study Reminder</p>
+                    <p className="text-xs text-muted-foreground">Remind students to study</p>
+                  </div>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left h-auto py-3"
+                  onClick={() => {
+                    setNotificationTitle('Important Update! ⚡');
+                    setNotificationBody('We have some important updates for you.');
+                    setNotificationUrl('/');
+                  }}
+                >
+                  <div>
+                    <p className="font-medium">Important Update</p>
+                    <p className="text-xs text-muted-foreground">General announcement</p>
+                  </div>
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
