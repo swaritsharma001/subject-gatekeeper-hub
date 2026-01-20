@@ -6,99 +6,99 @@
 
 @layer base {
   :root {
-    --background: 220 30% 98%;
-    --foreground: 222 47% 11%;
+    --background: 160 20% 98%;
+    --foreground: 160 50% 8%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 160 50% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 160 50% 8%;
 
-    --primary: 199 89% 48%;
+    --primary: 158 64% 52%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 32 95% 55%;
+    --secondary: 270 70% 60%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 20% 96%;
-    --muted-foreground: 220 10% 45%;
+    --muted: 160 15% 94%;
+    --muted-foreground: 160 10% 45%;
 
-    --accent: 199 89% 95%;
-    --accent-foreground: 199 89% 35%;
+    --accent: 158 64% 92%;
+    --accent-foreground: 158 64% 30%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 20% 90%;
-    --input: 220 20% 90%;
-    --ring: 199 89% 48%;
+    --border: 160 15% 88%;
+    --input: 160 15% 88%;
+    --ring: 158 64% 52%;
 
     --radius: 0.75rem;
 
-    /* Custom tokens - premium cyan & orange */
-    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(32 95% 55%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 30% 98%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(220 30% 98%) 0%, hsl(199 89% 97%) 50%, hsl(32 95% 97%) 100%);
-    --shadow-card: 0 4px 20px -4px hsl(199 89% 48% / 0.15);
-    --shadow-hover: 0 8px 30px -4px hsl(199 89% 48% / 0.25);
-    --shadow-modal: 0 25px 50px -12px hsl(222 47% 11% / 0.25);
+    /* Custom tokens - emerald & violet */
+    --gradient-primary: linear-gradient(135deg, hsl(158 64% 52%) 0%, hsl(270 70% 60%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(160 20% 97%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(160 20% 98%) 0%, hsl(158 40% 95%) 50%, hsl(270 40% 95%) 100%);
+    --shadow-card: 0 4px 20px -4px hsl(158 64% 52% / 0.15);
+    --shadow-hover: 0 12px 40px -8px hsl(158 64% 52% / 0.3);
+    --shadow-modal: 0 25px 50px -12px hsl(160 50% 8% / 0.25);
 
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 199 89% 48%;
+    --sidebar-foreground: 160 30% 26%;
+    --sidebar-primary: 158 64% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-accent: 160 15% 94%;
+    --sidebar-accent-foreground: 160 50% 10%;
+    --sidebar-border: 160 15% 88%;
+    --sidebar-ring: 158 64% 52%;
   }
 
   .dark {
-    --background: 222 47% 6%;
-    --foreground: 220 30% 98%;
+    --background: 160 30% 6%;
+    --foreground: 160 15% 95%;
 
-    --card: 222 47% 10%;
-    --card-foreground: 220 30% 98%;
+    --card: 160 30% 10%;
+    --card-foreground: 160 15% 95%;
 
-    --popover: 222 47% 10%;
-    --popover-foreground: 220 30% 98%;
+    --popover: 160 30% 10%;
+    --popover-foreground: 160 15% 95%;
 
-    --primary: 199 89% 48%;
+    --primary: 158 64% 52%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 32 95% 55%;
+    --secondary: 270 70% 60%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 222 47% 14%;
-    --muted-foreground: 220 20% 65%;
+    --muted: 160 30% 14%;
+    --muted-foreground: 160 15% 60%;
 
-    --accent: 199 89% 15%;
-    --accent-foreground: 199 89% 90%;
+    --accent: 158 64% 15%;
+    --accent-foreground: 158 64% 85%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 222 47% 16%;
-    --input: 222 47% 16%;
-    --ring: 199 89% 48%;
+    --border: 160 30% 16%;
+    --input: 160 30% 16%;
+    --ring: 158 64% 52%;
 
-    /* Custom tokens - premium cyan & orange */
-    --gradient-primary: linear-gradient(135deg, hsl(199 89% 48%) 0%, hsl(32 95% 55%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(222 47% 10%) 0%, hsl(222 47% 8%) 100%);
-    --gradient-hero: linear-gradient(135deg, hsl(222 47% 6%) 0%, hsl(199 89% 10%) 50%, hsl(32 95% 10%) 100%);
-    --shadow-card: 0 4px 20px -4px hsl(199 89% 48% / 0.2);
-    --shadow-hover: 0 8px 30px -4px hsl(199 89% 48% / 0.35);
+    /* Custom tokens - emerald & violet */
+    --gradient-primary: linear-gradient(135deg, hsl(158 64% 52%) 0%, hsl(270 70% 60%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(160 30% 10%) 0%, hsl(160 30% 8%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(160 30% 6%) 0%, hsl(158 40% 10%) 50%, hsl(270 40% 10%) 100%);
+    --shadow-card: 0 4px 20px -4px hsl(158 64% 52% / 0.25);
+    --shadow-hover: 0 12px 40px -8px hsl(158 64% 52% / 0.4);
     --shadow-modal: 0 25px 50px -12px hsl(0 0% 0% / 0.5);
 
-    --sidebar-background: 222 47% 6%;
-    --sidebar-foreground: 220 30% 90%;
-    --sidebar-primary: 199 89% 48%;
+    --sidebar-background: 160 30% 6%;
+    --sidebar-foreground: 160 15% 90%;
+    --sidebar-primary: 158 64% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 47% 14%;
-    --sidebar-accent-foreground: 220 30% 90%;
-    --sidebar-border: 222 47% 16%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-accent: 160 30% 14%;
+    --sidebar-accent-foreground: 160 15% 90%;
+    --sidebar-border: 160 30% 16%;
+    --sidebar-ring: 158 64% 52%;
   }
 }
 
@@ -136,5 +136,33 @@
   
   .shadow-modal {
     box-shadow: var(--shadow-modal);
+  }
+
+  @keyframes gradient-x {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  .animate-gradient-x {
+    animation: gradient-x 3s ease infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    50% { transform: scale(1.2); opacity: 0; }
+    100% { transform: scale(0.8); opacity: 0.5; }
+  }
+
+  .animate-pulse-ring {
+    animation: pulse-ring 2s ease-out infinite;
   }
 }
