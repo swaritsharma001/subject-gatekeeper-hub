@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import AuthModal from "@/components/AuthModal";
 import Navbar from "@/components/Navbar";
+import SplashScreen from "@/components/SplashScreen";
 import Index from "./pages/Index";
 import Subject from "./pages/Subject";
 import Chapter from "./pages/Chapter";
@@ -16,30 +18,51 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <ThemeProvider defaultTheme="dark" storageKey="studyx-theme">
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AuthModal />
-            <Navbar />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/subject/:slug" element={<Subject />} />
-              <Route path="/subject/:slug/chapter/:chapterId" element={<Chapter />} />
-              <Route path="/subject/:slug/chapter/:chapterId/lecture/:lectureId" element={<Lecture />} />
-              <Route path="/subject/:slug/lecture/:lectureId" element={<Lecture />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ThemeProvider>
-);
+const App = () => {
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashComplete, setSplashComplete] = useState(false);
+
+  useEffect(() => {
+    // Check if splash was already shown this session
+    const splashShown = sessionStorage.getItem('splashShown');
+    if (splashShown) {
+      setShowSplash(false);
+      setSplashComplete(true);
+    }
+  }, []);
+
+  const handleSplashComplete = () => {
+    setSplashComplete(true);
+    setShowSplash(false);
+    sessionStorage.setItem('splashShown', 'true');
+  };
+
+  return (
+    <ThemeProvider defaultTheme="dark" storageKey="studyx-theme">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <Toaster />
+            <Sonner />
+            {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
+            <BrowserRouter>
+              <AuthModal />
+              <Navbar />
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/subject/:slug" element={<Subject />} />
+                <Route path="/subject/:slug/chapter/:chapterId" element={<Chapter />} />
+                <Route path="/subject/:slug/chapter/:chapterId/lecture/:lectureId" element={<Lecture />} />
+                <Route path="/subject/:slug/lecture/:lectureId" element={<Lecture />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </AuthProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
+};
 
 export default App;
