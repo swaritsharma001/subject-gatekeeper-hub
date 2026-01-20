@@ -2,13 +2,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, X, ChevronLeft, ChevronRight, Zap, Gift, Rocket, Star } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
+type AnnouncementType = 'new' | 'sale' | 'referral' | 'content' | 'social';
+
 const announcements = [
-  { id: 1, icon: '🎉', text: 'New courses added weekly! Start learning today', emoji: Sparkles },
-  { id: 2, icon: '🔥', text: 'Limited time: Get 50% off premium access', emoji: Zap },
-  { id: 3, icon: '🎁', text: 'Refer a friend and earn free study credits', emoji: Gift },
-  { id: 4, icon: '🚀', text: 'New Science & Math modules now available', emoji: Rocket },
-  { id: 5, icon: '⭐', text: 'Join 10,000+ students already learning', emoji: Star },
+  { id: 1, icon: '🎉', text: 'New courses added weekly! Start learning today', emoji: Sparkles, type: 'new' as AnnouncementType },
+  { id: 2, icon: '🔥', text: 'Limited time: Get 50% off premium access', emoji: Zap, type: 'sale' as AnnouncementType },
+  { id: 3, icon: '🎁', text: 'Refer a friend and earn free study credits', emoji: Gift, type: 'referral' as AnnouncementType },
+  { id: 4, icon: '🚀', text: 'New Science & Math modules now available', emoji: Rocket, type: 'content' as AnnouncementType },
+  { id: 5, icon: '⭐', text: 'Join 50+ students already learning', emoji: Star, type: 'social' as AnnouncementType },
 ];
+
+const themeColors: Record<AnnouncementType, string> = {
+  new: 'from-emerald-500 via-teal-500 to-emerald-500',
+  sale: 'from-rose-500 via-orange-500 to-rose-500',
+  referral: 'from-violet-500 via-purple-500 to-violet-500',
+  content: 'from-blue-500 via-indigo-500 to-blue-500',
+  social: 'from-amber-500 via-yellow-500 to-amber-500',
+};
 
 const AnnouncementBar = () => {
   const [isVisible, setIsVisible] = useState(true);
@@ -40,7 +50,7 @@ const AnnouncementBar = () => {
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: -50, opacity: 0 }}
-      className="relative bg-gradient-to-r from-primary via-secondary to-primary bg-[length:200%_100%] animate-gradient-x py-2.5 px-4 text-center overflow-hidden"
+      className={`relative bg-gradient-to-r ${themeColors[current.type]} bg-[length:200%_100%] animate-gradient-x py-2.5 px-4 text-center overflow-hidden transition-colors duration-500`}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
