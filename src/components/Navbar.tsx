@@ -1,9 +1,11 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, LogOut, Home } from 'lucide-react';
+import { LogOut, Home } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import logo from '@/assets/logo.png';
 
 const Navbar: React.FC = () => {
   const { isAuthenticated, logout } = useAuth();
@@ -24,17 +26,17 @@ const Navbar: React.FC = () => {
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary"
+            className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl"
           >
-            <BookOpen className="h-5 w-5 text-primary-foreground" />
+            <img src={logo} alt="StudyX Logo" className="h-10 w-10 object-contain" />
           </motion.div>
-          <span className="font-display text-xl font-bold text-foreground">
-            Subject Topper
+          <span className="font-display text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            StudyX
           </span>
         </Link>
 
         {/* Navigation */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {location.pathname !== '/' && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -52,6 +54,8 @@ const Navbar: React.FC = () => {
               </Link>
             </motion.div>
           )}
+
+          <ThemeToggle />
 
           <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
             <Button
