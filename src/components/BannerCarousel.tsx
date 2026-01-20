@@ -70,33 +70,6 @@ const BannerCarousel = () => {
               alt={banners[currentIndex].title}
               className="w-full h-full object-cover"
             />
-
-            {/* Overlay gradient */}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
-
-            {/* Content */}
-            <div className="absolute inset-0 flex flex-col justify-center px-6 sm:px-10 md:px-16">
-              <motion.div
-                initial={{ opacity: 0, x: -30 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2, duration: 0.5 }}
-                className="max-w-lg"
-              >
-                <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white leading-tight">
-                  {banners[currentIndex].title}
-                </h2>
-                <p className="mt-2 text-lg sm:text-xl md:text-2xl text-white/90 font-medium">
-                  {banners[currentIndex].subtitle}
-                </p>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="mt-4 md:mt-6 px-6 py-2.5 md:px-8 md:py-3 bg-gradient-to-r from-primary to-secondary text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-shadow"
-                >
-                  {banners[currentIndex].cta}
-                </motion.button>
-              </motion.div>
-            </div>
           </motion.div>
         </AnimatePresence>
       </div>
