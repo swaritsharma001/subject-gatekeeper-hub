@@ -53,8 +53,8 @@ const BannerCarousel = () => {
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      {/* Banner slides */}
-      <div className="relative aspect-[21/9] sm:aspect-[16/6] md:aspect-[21/8]">
+      {/* Banner slides - taller aspect ratios for better image visibility */}
+      <div className="relative aspect-[16/9] sm:aspect-[16/7] md:aspect-[16/6] lg:aspect-[21/9]">
         <AnimatePresence mode="wait">
           <motion.div
             key={banners[currentIndex].id}
