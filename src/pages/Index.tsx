@@ -5,6 +5,7 @@ import SubjectCard from '@/components/SubjectCard';
 import { useSubjects } from '@/hooks/useSubjects';
 import Footer from '@/components/Footer';
 import AnnouncementBar from '@/components/AnnouncementBar';
+import BannerCarousel from '@/components/BannerCarousel';
 import logo from '@/assets/logo.png';
 
 // Icon mapping for subjects
@@ -121,6 +122,16 @@ const Index: React.FC = () => {
             >
               Choose a subject to start your learning journey ✨
             </motion.p>
+          </motion.div>
+
+          {/* Banner Carousel */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+            className="mb-12"
+          >
+            <BannerCarousel />
           </motion.div>
 
           {/* Loading state */}
