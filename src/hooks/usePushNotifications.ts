@@ -59,15 +59,20 @@ export const usePushNotifications = () => {
   }, []);
 
   const getPushRegistration = async () => {
-    // Ensure our push-capable SW is registered (the PWA SW may not handle `push` events)
-    const existing = await navigator.serviceWorker.getRegistration('/');
+    // IMPORTANT:
+    // The PWA (vite-plugin-pwa) also registers a service worker at scope '/'.
+    // Only one SW can control a given scope, so registering our push SW at '/'
+    // can be replaced by the PWA SW later (breaking push delivery).
+    //
+    // Fix: Register the push SW under a dedicated scope that doesn't conflict.
+    const PUSH_SCOPE = '/push/';
 
-    // If the existing SW is already our push SW, reuse it; otherwise register our own.
+    const existing = await navigator.serviceWorker.getRegistration(PUSH_SCOPE);
     if (existing?.active?.scriptURL?.includes('sw-push.js')) {
       return existing;
     }
 
-    const reg = await navigator.serviceWorker.register('/sw-push.js', { scope: '/' });
+    const reg = await navigator.serviceWorker.register('/sw-push.js', { scope: PUSH_SCOPE });
     await navigator.serviceWorker.ready;
     return reg;
   };
